@@ -99,10 +99,12 @@ class AppGUIMixin:
 
             verbs = []
             for verb in inheritors(Verb):
-                print(verb)
                 verb_obj = verb()
-                if getattr(verb, "map", False) and verb_obj.show(self):
+                show = verb_obj.show(self)
+                print (verb_obj, show)
+                if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
+            #assert 0, verbs
             verbs.sort(key=lambda v: v.help)
 
             key = self.draw(verbs)
@@ -178,6 +180,12 @@ class App(AppGUIMixin):
         path = self.output(*args, **kwargs)
         self.go(path)
 
+def and_(*show_mixins):
+    class Tmp:
+        def show(self, app):
+            return all(i().show(app) for i in show_mixins)
+    return Tmp
+
 
 class ShowIfGitMixin:
     def show(self, app):
@@ -191,6 +199,7 @@ class ShowIfFileMixin:
 
 class ShowIfDirMixin:
     def show(self, app):
+        print(self, os.path.isdir(app.path))
         return os.path.isdir(app.path)
 
 
@@ -214,7 +223,7 @@ class CommandVerb(Verb):
             app.run(self.command.format(run))
 
 
-class FindGitFileVerb(ShowIfGitMixin, Verb):
+class FindGitFileVerb(and_(ShowIfGitMixin, ShowIfDirMixin), Verb):
     help = "Find git files"
     map = "f"
 
@@ -240,9 +249,12 @@ class ListDirsVerb(ShowIfDirMixin, Verb):
         app.outputgo("ls | fzf", shell=True)
 
 
-class ParentDirVerb(ShowIfDirMixin, Verb):
-    help = "Goto parent dir"
+class ParentDirVerb(Verb):
+    help = 'Goto parent dir'
     map = "u"
+
+    def show(self, app):
+        return app.path != '/'
 
     def __call__(self, app):
         newpath = os.path.dirname(app.path)
@@ -309,7 +321,7 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
     command = "bash"
 
 
-class RunEditVerb(CommandVerb, ShowIfFileMixin):
+class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
     command = "nvr +FloatermHide {}"
 
