@@ -198,89 +198,109 @@ def whendir(ctx):
 app = App()
 
 
-@app.map("f", when=lambda ctx: whengitroot(ctx))
-def findgitfile(ctx):
-    "Find git files"
-    ctx.outputgo("git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=ctx.git)
+class FindGitFileVerb(Verb):
+    help = 'Find git files'
+    map = 'f'
+    when = whengitroot
+    def __call__(self, app):
+        app.outputgo("git ls-files | fzf --preview 'cat -n {}'",
+                shell=True, cwd=ctx.git)
 
 
-@app.map("F", when=whendir)
-def findgitfile(ctx):
-    "Find files"
-    ctx.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
+class FindFilesVerb(Verb):
+    help = 'Find files'
+    map = 'G'
+    when = whendir
+    def __call__(self, app):
+        ctx.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
+
+class ListDirsVerb(Verb):
+    help = 'List dir'
+    map = 'l'
+    when = whendir
+    def __call__(self, app):
+        ctx.outputgo("ls | fzf", shell=True)
 
 
-@app.map("l", when=whendir)
-def findls(ctx):
-    "List dir"
-    ctx.outputgo("ls | fzf", shell=True)
+class ParentDirVerb(Verb):
+    help = "Goto parent dir"
+    map = 'u'
+    when = whendir
+    def __call__(self, app):
+        newpath = os.path.dirname(ctx.path)
+        ctx.go(newpath)
 
 
-@app.map("g", when=whengitroot)
-def lazygit(ctx):
-    "Run `lazygit`"
-    ctx.run("lazygit")
+class GotoGitRootVerb(Verb):
+    help = "Goto git root"
+    map = 'p'
+
+    def when(ctx):
+        return ctx.git and not ctx.path == ctx.git
+
+    def __call__(self, app):
+        newpath = os.path.dirname(ctx.path)
+        ctx.go(newpath)
 
 
-@app.map("s", when=whendir)
-def shell(ctx):
-    "Run `bash`"
-    ctx.run("bash")
+class ProjectsVerb(Verb):
+    help = "Find git projects"
+    map = 'P'
+
+    def when(ctx):
+        not whengit(ctx)
+
+    def __call__(self, app):
+        match = ctx.output(
+            """find -name .git -maxdepth 4 2>/dev/null |
+                    xargs realpath | xargs dirname | fzf""",
+            shell=True,
+        )
+        ctx.go(match)
 
 
-@app.map("x", when=whenfile)
-def less(ctx):
-    "Run `less`"
-    ctx.run(["less", ctx.path])
+class BackVerb(Verb):
+    help = "Go back"
+    map = 'b'
 
+    def when(ctx):
+        return ctx.hist
 
-@app.map("u", when=lambda ctx: ctx.path != "/")
-def up(ctx):
-    "Goto parent dir"
-    newpath = os.path.dirname(ctx.path)
-    ctx.go(newpath)
-
-
-@app.map("e", when=whenfile)
-def edit(ctx):
-    "Run `vim`"
-    line = 0
-    ctx.run(["nvr", "+FloatermHide", f"+e {ctx.path}", f"+{line}"])
-
-
-@app.map("p", when=lambda ctx: ctx.git and not ctx.path == ctx.git)
-def project(ctx):
-    "Goto git root"
-    ctx.go(ctx.git)
-
-
-@app.map("P", when=lambda ctx: not whengit(ctx))
-def projects(ctx):
-    "Find git projects"
-    match = ctx.output(
-        """find -name .git -maxdepth 4 2>/dev/null |
-                xargs realpath | xargs dirname | fzf""",
-        shell=True,
-    )
-    ctx.go(match)
-
-
-@app.map("b", when=lambda ctx: ctx.hist)
-def back(ctx):
-    "Go back"
+    def __call__(self, app):
     path = ctx.hist.pop(-1)
     ctx.go(path, savehist=False)
 
 
-@app.map("B", when=lambda ctx: whenfile(ctx) and ctx.path.endswith(".py"))
-def black(ctx):
-    ctx.run(["black", ctx.path])
+class ProjectsVerb(Verb):
+    help = "Quit"
+    map = 'q'
+    def __call__(self, app):
+        sys.exit(0)
 
+class RunLazygitVerb(CommandVerb):
+    map = 'g'
+    when = whengitroot
+    command = 'lazygit'
 
-@app.map("q")
-def black(ctx):
-    "Quit"
-    sys.exit(0)
+class RunLessVerb(CommandVerb):
+    map = 'x'
+    when = whendir
+    command = 'less {}'
+
+class RunBashVerb(CommandVerb):
+    map = 's'
+    when = whendir
+    command = 'bash'
+
+class RunEditVerb(CommandVerb):
+    map = 'e'
+    command = "nvr +FloatermHide {}"
+
+class RunBlackVerb(CommandVerb):
+    map = 'B'
+    def when(ctx):
+        return whenfile(ctx) and ctx.path.endswith(".py")
+    command = "black {}"
 
 
 app.go("~/byrd/warehouse/requirements.txt")
