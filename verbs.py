@@ -22,7 +22,7 @@ class AppGUIMixin:
         # Clear screen
         stdscr.clear()
 
-        needed_lines = max(len(maps) + 2 + self.frame_extra_height, 10)
+        needed_lines = max(len(verbs) + 2 + self.frame_extra_height, 10)
         needed_width = max(len(self.path), 50) + self.frame_extra_lenght
         available_lines, available_width = stdscr.getmaxyx()
 
@@ -47,7 +47,7 @@ class AppGUIMixin:
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
 
-        for index, verbs in enumerate(verb.items()):
+        for index, verb in enumerate(verbs):
             help = verb.get_help(self)
             if index == self.arrow:
                 a = "> "
@@ -90,7 +90,7 @@ class AppGUIMixin:
             for verb in Verb.__subclasses__():
                 print(verb)
                 verb_obj = verb()
-                if not getattr(verb, 'meta', False) and verb_obj.show(self):
+                if not getattr(verb, "meta", False) and verb_obj.show(self):
                     verbs.append(verb_obj)
 
             key = self.draw(verbs)
@@ -102,9 +102,9 @@ class AppGUIMixin:
                 self.arrow = max(self.arrow - 1, 0)
                 continue
             elif key == "\n":
-                func = list(verbs.values())[self.arrow]
+                verb = list(verbs)[self.arrow]
                 try:
-                    func(self)
+                    verb(self)
                 except subprocess.CalledProcessError as exc:
                     print(exc)
 
@@ -152,7 +152,6 @@ class App(AppGUIMixin):
         except subprocess.CalledProcessError:
             self.git = None
 
-
     def output(self, *args, **kwargs):
         kwargs.setdefault("cwd", self.dir)
         resp = subprocess.check_output(*args, **kwargs)
@@ -168,7 +167,6 @@ class App(AppGUIMixin):
         self.go(path)
 
 
-
 class ShowIfGitMixin:
     def show(self, app):
         return app.git
@@ -176,14 +174,18 @@ class ShowIfGitMixin:
 
 class ShowIfFileMixin:
     def show(self, app):
-        return ctx.dir != ctx.path
+        return app.dir == app.path
+
 
 class ShowIfDirMixin:
-    def show(self, ctx):
-        return ctx.dir != ctx.path
+    def show(self, app):
+        return app.dir != app.path
 
 
 class Verb:
+    def show(self, app):
+        return True
+
     def get_help(self, app):
         return getattr(self, "help", self.__class__.__name__)
 
@@ -207,7 +209,7 @@ class FindGitFileVerb(Verb, ShowIfGitMixin):
 
     def __call__(self, app):
         app.outputgo(
-            "git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=ctx.git
+            "git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=app.git
         )
 
 
@@ -216,7 +218,7 @@ class FindFilesVerb(Verb, ShowIfDirMixin):
     map = "G"
 
     def __call__(self, app):
-        ctx.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
+        app.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
 
 
 class ListDirsVerb(Verb, ShowIfDirMixin):
@@ -224,7 +226,7 @@ class ListDirsVerb(Verb, ShowIfDirMixin):
     map = "l"
 
     def __call__(self, app):
-        ctx.outputgo("ls | fzf", shell=True)
+        app.outputgo("ls | fzf", shell=True)
 
 
 class ParentDirVerb(Verb, ShowIfDirMixin):
@@ -232,48 +234,48 @@ class ParentDirVerb(Verb, ShowIfDirMixin):
     map = "u"
 
     def __call__(self, app):
-        newpath = os.path.dirname(ctx.path)
-        ctx.go(newpath)
+        newpath = os.path.dirname(app.path)
+        app.go(newpath)
 
 
 class GotoGitRootVerb(Verb):
     help = "Goto git root"
     map = "p"
 
-    def show(self, ctx):
-        return ctx.git and not ctx.path == ctx.git
+    def show(self, app):
+        return app.git and not app.path == app.git
 
     def __call__(self, app):
-        newpath = os.path.dirname(ctx.path)
-        ctx.go(newpath)
+        newpath = os.path.dirname(app.path)
+        app.go(newpath)
 
 
-class ProjectsVerb(Verb, ShowIfGitMixin):
+class ListProjectsVerb(Verb, ShowIfGitMixin):
     help = "Find git projects"
     map = "P"
 
     def __call__(self, app):
-        match = ctx.output(
+        match = app.output(
             """find -name .git -maxdepth 4 2>/dev/null |
                     xargs realpath | xargs dirname | fzf""",
             shell=True,
         )
-        ctx.go(match)
+        app.go(match)
 
 
 class BackVerb(Verb):
     help = "Go back"
     map = "b"
 
-    def show(self, ctx):
-        return ctx.hist
+    def show(self, app):
+        return app.hist
 
     def __call__(self, app):
-        path = ctx.hist.pop(-1)
-        ctx.go(path, savehist=False)
+        path = app.hist.pop(-1)
+        app.go(path, savehist=False)
 
 
-class ProjectsVerb(Verb):
+class QuitVerb(Verb):
     help = "Quit"
     map = "q"
 
@@ -304,8 +306,8 @@ class RunEditVerb(CommandVerb):
 class RunBlackVerb(CommandVerb):
     map = "B"
 
-    def show(self, ctx):
-        return whenfile(ctx) and ctx.path.endswith(".py")
+    def show(self, app):
+        return whenfile(app) and app.path.endswith(".py")
 
     command = "black {}"
 
