@@ -7,6 +7,18 @@ from time import sleep
 from curses import wrapper
 from math import floor
 
+# https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
+def inheritors(klass):
+    subclasses = set()
+    work = [klass]
+    while work:
+        parent = work.pop()
+        for child in parent.__subclasses__():
+            if child not in subclasses:
+                subclasses.add(child)
+                work.append(child)
+    return subclasses
+
 
 class AppGUIMixin:
 
@@ -48,13 +60,12 @@ class AppGUIMixin:
         c += 1
 
         for index, verb in enumerate(verbs):
-            help = verb.get_help(self)
             if index == self.arrow:
                 a = "> "
             else:
                 a = "  "
             stdscr.addstr(
-                c, pad_left, self._frame(a + f"{help} [{verb.map}]", needed_width),
+                c, pad_left, self._frame(a + f"{verb.help} [{verb.map}]", needed_width),
             )
             c += 1
 
@@ -87,11 +98,12 @@ class AppGUIMixin:
         while True:
 
             verbs = []
-            for verb in Verb.__subclasses__():
+            for verb in inheritors(Verb):
                 print(verb)
                 verb_obj = verb()
-                if not getattr(verb, "meta", False) and verb_obj.show(self):
+                if getattr(verb, "map", False) and verb_obj.show(self):
                     verbs.append(verb_obj)
+            verbs.sort(key=lambda v: v.help)
 
             key = self.draw(verbs)
 
@@ -109,8 +121,8 @@ class AppGUIMixin:
                     print(exc)
 
             keyfound = False
-            for verb in verbs.items():
-                if verb.amp == key:
+            for verb in verbs:
+                if verb.map == key:
                     keyfound = True
                     try:
                         verb(self)
@@ -174,28 +186,27 @@ class ShowIfGitMixin:
 
 class ShowIfFileMixin:
     def show(self, app):
-        return app.dir == app.path
+        return os.path.isfile(app.path)
 
 
 class ShowIfDirMixin:
     def show(self, app):
-        return app.dir != app.path
+        return os.path.isdir(app.path)
 
 
 class Verb:
     def show(self, app):
         return True
 
-    def get_help(self, app):
+    @property
+    def help(self):
         return getattr(self, "help", self.__class__.__name__)
 
 
 class CommandVerb(Verb):
-
-    meta = True
-
-    def show(self, app):
-        return True
+    @property
+    def help(self):
+        return f"Run `{self.command}`"
 
     def __call__(self, app):
         def __call__(self, app):
@@ -203,7 +214,7 @@ class CommandVerb(Verb):
             app.run(self.command.format(run))
 
 
-class FindGitFileVerb(Verb, ShowIfGitMixin):
+class FindGitFileVerb(ShowIfGitMixin, Verb):
     help = "Find git files"
     map = "f"
 
@@ -213,7 +224,7 @@ class FindGitFileVerb(Verb, ShowIfGitMixin):
         )
 
 
-class FindFilesVerb(Verb, ShowIfDirMixin):
+class FindFilesVerb(ShowIfDirMixin, Verb):
     help = "Find files"
     map = "G"
 
@@ -221,7 +232,7 @@ class FindFilesVerb(Verb, ShowIfDirMixin):
         app.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
 
 
-class ListDirsVerb(Verb, ShowIfDirMixin):
+class ListDirsVerb(ShowIfDirMixin, Verb):
     help = "List dir"
     map = "l"
 
@@ -229,7 +240,7 @@ class ListDirsVerb(Verb, ShowIfDirMixin):
         app.outputgo("ls | fzf", shell=True)
 
 
-class ParentDirVerb(Verb, ShowIfDirMixin):
+class ParentDirVerb(ShowIfDirMixin, Verb):
     help = "Goto parent dir"
     map = "u"
 
@@ -250,7 +261,7 @@ class GotoGitRootVerb(Verb):
         app.go(newpath)
 
 
-class ListProjectsVerb(Verb, ShowIfGitMixin):
+class ListProjectsVerb(ShowIfGitMixin, Verb):
     help = "Find git projects"
     map = "P"
 
@@ -283,22 +294,22 @@ class QuitVerb(Verb):
         sys.exit(0)
 
 
-class RunLazygitVerb(CommandVerb, ShowIfGitMixin):
+class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
     map = "g"
     command = "lazygit"
 
 
-class RunLessVerb(CommandVerb, ShowIfDirMixin):
+class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "x"
     command = "less {}"
 
 
-class RunBashVerb(CommandVerb, ShowIfDirMixin):
+class RunBashVerb(ShowIfDirMixin, CommandVerb):
     map = "s"
     command = "bash"
 
 
-class RunEditVerb(CommandVerb):
+class RunEditVerb(CommandVerb, ShowIfFileMixin):
     map = "e"
     command = "nvr +FloatermHide {}"
 
@@ -307,7 +318,7 @@ class RunBlackVerb(CommandVerb):
     map = "B"
 
     def show(self, app):
-        return whenfile(app) and app.path.endswith(".py")
+        return ShowIfDirMixin().show(app) and app.path.endswith(".py")
 
     command = "black {}"
 
