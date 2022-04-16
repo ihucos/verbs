@@ -59,15 +59,28 @@ class AppGUIMixin:
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
 
+        last_section = None
         for index, verb in enumerate(verbs):
+            section = (verb.show.__doc__ or 'other')
+
+            if section != last_section:
+                stdscr.addstr(c, pad_left, self._frame("", needed_width))
+                c += 1
+                stdscr.addstr(
+                    c, pad_left, self._frame(f"{section}:", needed_width),
+                )
+                c += 1
+
             if index == self.arrow:
-                a = "> "
+                a = ". "
             else:
                 a = "  "
             stdscr.addstr(
-                c, pad_left, self._frame(a + f"{verb.help} [{verb.map}]", needed_width),
+                c, pad_left, self._frame(a + f"{verb.help}".ljust(32) + f"[{verb.map}]", needed_width),
             )
             c += 1
+
+            last_section = section
 
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
@@ -105,7 +118,7 @@ class AppGUIMixin:
                 if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
             #assert 0, verbs
-            verbs.sort(key=lambda v: v.help)
+            verbs.sort(key=lambda v: (v.show.__doc__ or 'other', v.help))
 
             key = self.draw(verbs)
 
@@ -186,25 +199,34 @@ def and_(*show_mixins):
             return all(i().show(app) for i in show_mixins)
     return Tmp
 
+def not_(mixin):
+    class Tmp:
+        def show(self, app):
+            return not mixin().show(app)
+    return Tmp
+
 
 class ShowIfGitMixin:
     def show(self, app):
+        'git'
         return app.git
 
 
 class ShowIfFileMixin:
     def show(self, app):
+        'file'
         return os.path.isfile(app.path)
 
 
 class ShowIfDirMixin:
     def show(self, app):
-        print(self, os.path.isdir(app.path))
+        'dir'
         return os.path.isdir(app.path)
 
 
 class Verb:
     def show(self, app):
+        'other'
         return True
 
     @property
@@ -223,7 +245,7 @@ class CommandVerb(Verb):
             app.run(self.command.format(run))
 
 
-class FindGitFileVerb(and_(ShowIfGitMixin, ShowIfDirMixin), Verb):
+class FindGitFileVerb(ShowIfGitMixin, Verb):
     help = "Find git files"
     map = "f"
 
@@ -273,8 +295,8 @@ class GotoGitRootVerb(Verb):
         app.go(newpath)
 
 
-class ListProjectsVerb(ShowIfGitMixin, Verb):
-    help = "Find git projects"
+class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
+    help = "Find projects"
     map = "P"
 
     def __call__(self, app):
