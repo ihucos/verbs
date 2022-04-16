@@ -2,6 +2,7 @@ import os
 import subprocess
 import sys
 import curses
+import shlex
 from time import sleep
 from curses import wrapper
 from math import floor
@@ -17,7 +18,7 @@ class AppGUIMixin:
         # return "█ " + str.ljust(width - 4) + " █"
         return str
 
-    def _draw(self, stdscr, maps):
+    def _draw(self, stdscr, verbs):
         # Clear screen
         stdscr.clear()
 
@@ -46,15 +47,14 @@ class AppGUIMixin:
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
 
-        for index, (keycombo, func) in enumerate(maps.items()):
+        for index, verbs in enumerate(verb.items()):
+            help = verb.get_help(self)
             if index == self.arrow:
                 a = "> "
             else:
                 a = "  "
             stdscr.addstr(
-                c,
-                pad_left,
-                self._frame(a + f"{func.__doc__} [{keycombo}]", needed_width),
+                c, pad_left, self._frame(a + f"{help} [{verb.map}]", needed_width),
             )
             c += 1
 
@@ -83,42 +83,37 @@ class AppGUIMixin:
     def flicker(self, *args, **kwargs):
         return wrapper(self._flicker, *args, **kwargs)
 
-    def getactivemaps(self):
-        activemaps = {}
-        for (keycombo, (func, when)) in self.maps.items():
-            if when(self):
-                activemaps[keycombo] = func
-        return activemaps
-
     def _main(self):
         while True:
 
-            activemaps = self.getactivemaps()
-            print(activemaps)
-            activemaps = dict(
-                sorted(activemaps.items(), key=lambda i: i[1].__doc__ or str(i[1]))
-            )
-            key = self.draw(activemaps)
+            verbs = []
+            for verb in Verb.__subclasses__():
+                print(verb)
+                verb_obj = verb()
+                if not getattr(verb, 'meta', False) and verb_obj.show(self):
+                    verbs.append(verb_obj)
+
+            key = self.draw(verbs)
 
             if key in ("j", "KEY_DOWN"):
-                self.arrow = min(self.arrow + 1, len(activemaps) - 1)
+                self.arrow = min(self.arrow + 1, len(verbs) - 1)
                 continue
             elif key in ("k", "KEY_UP"):
                 self.arrow = max(self.arrow - 1, 0)
                 continue
             elif key == "\n":
-                func = list(activemaps.values())[self.arrow]
+                func = list(verbs.values())[self.arrow]
                 try:
                     func(self)
                 except subprocess.CalledProcessError as exc:
                     print(exc)
 
             keyfound = False
-            for (keycombo, func) in activemaps.items():
-                if keycombo == key:
+            for verb in verbs.items():
+                if verb.amp == key:
                     keyfound = True
                     try:
-                        func(self)
+                        verb(self)
                     except subprocess.CalledProcessError as exc:
                         print(exc)
             if not keyfound:
@@ -157,12 +152,6 @@ class App(AppGUIMixin):
         except subprocess.CalledProcessError:
             self.git = None
 
-    def map(self, keycombo, when=lambda _: True):
-        def decorator(func):
-            self.maps[keycombo] = (func, when)
-            return func
-
-        return decorator
 
     def output(self, *args, **kwargs):
         kwargs.setdefault("cwd", self.dir)
@@ -179,53 +168,69 @@ class App(AppGUIMixin):
         self.go(path)
 
 
-def whengit(ctx):
-    return app.git
+
+class ShowIfGitMixin:
+    def show(self, app):
+        return app.git
 
 
-def whengitroot(ctx):
-    return app.git and app.git == ctx.path
+class ShowIfFileMixin:
+    def show(self, app):
+        return ctx.dir != ctx.path
+
+class ShowIfDirMixin:
+    def show(self, ctx):
+        return ctx.dir != ctx.path
 
 
-def whenfile(ctx):
-    return ctx.dir != ctx.path
+class Verb:
+    def get_help(self, app):
+        return getattr(self, "help", self.__class__.__name__)
 
 
-def whendir(ctx):
-    return ctx.dir == ctx.path
+class CommandVerb(Verb):
 
+    meta = True
 
-app = App()
+    def show(self, app):
+        return True
 
-
-class FindGitFileVerb(Verb):
-    help = 'Find git files'
-    map = 'f'
-    when = whengitroot
     def __call__(self, app):
-        app.outputgo("git ls-files | fzf --preview 'cat -n {}'",
-                shell=True, cwd=ctx.git)
+        def __call__(self, app):
+            run = shlex.quote(app.path)
+            app.run(self.command.format(run))
 
 
-class FindFilesVerb(Verb):
-    help = 'Find files'
-    map = 'G'
-    when = whendir
+class FindGitFileVerb(Verb, ShowIfGitMixin):
+    help = "Find git files"
+    map = "f"
+
+    def __call__(self, app):
+        app.outputgo(
+            "git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=ctx.git
+        )
+
+
+class FindFilesVerb(Verb, ShowIfDirMixin):
+    help = "Find files"
+    map = "G"
+
     def __call__(self, app):
         ctx.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
 
-class ListDirsVerb(Verb):
-    help = 'List dir'
-    map = 'l'
-    when = whendir
+
+class ListDirsVerb(Verb, ShowIfDirMixin):
+    help = "List dir"
+    map = "l"
+
     def __call__(self, app):
         ctx.outputgo("ls | fzf", shell=True)
 
 
-class ParentDirVerb(Verb):
+class ParentDirVerb(Verb, ShowIfDirMixin):
     help = "Goto parent dir"
-    map = 'u'
-    when = whendir
+    map = "u"
+
     def __call__(self, app):
         newpath = os.path.dirname(ctx.path)
         ctx.go(newpath)
@@ -233,9 +238,9 @@ class ParentDirVerb(Verb):
 
 class GotoGitRootVerb(Verb):
     help = "Goto git root"
-    map = 'p'
+    map = "p"
 
-    def when(ctx):
+    def show(self, ctx):
         return ctx.git and not ctx.path == ctx.git
 
     def __call__(self, app):
@@ -243,12 +248,9 @@ class GotoGitRootVerb(Verb):
         ctx.go(newpath)
 
 
-class ProjectsVerb(Verb):
+class ProjectsVerb(Verb, ShowIfGitMixin):
     help = "Find git projects"
-    map = 'P'
-
-    def when(ctx):
-        not whengit(ctx)
+    map = "P"
 
     def __call__(self, app):
         match = ctx.output(
@@ -261,47 +263,54 @@ class ProjectsVerb(Verb):
 
 class BackVerb(Verb):
     help = "Go back"
-    map = 'b'
+    map = "b"
 
-    def when(ctx):
+    def show(self, ctx):
         return ctx.hist
 
     def __call__(self, app):
-    path = ctx.hist.pop(-1)
-    ctx.go(path, savehist=False)
+        path = ctx.hist.pop(-1)
+        ctx.go(path, savehist=False)
 
 
 class ProjectsVerb(Verb):
     help = "Quit"
-    map = 'q'
+    map = "q"
+
     def __call__(self, app):
         sys.exit(0)
 
-class RunLazygitVerb(CommandVerb):
-    map = 'g'
-    when = whengitroot
-    command = 'lazygit'
 
-class RunLessVerb(CommandVerb):
-    map = 'x'
-    when = whendir
-    command = 'less {}'
+class RunLazygitVerb(CommandVerb, ShowIfGitMixin):
+    map = "g"
+    command = "lazygit"
 
-class RunBashVerb(CommandVerb):
-    map = 's'
-    when = whendir
-    command = 'bash'
+
+class RunLessVerb(CommandVerb, ShowIfDirMixin):
+    map = "x"
+    command = "less {}"
+
+
+class RunBashVerb(CommandVerb, ShowIfDirMixin):
+    map = "s"
+    command = "bash"
+
 
 class RunEditVerb(CommandVerb):
-    map = 'e'
+    map = "e"
     command = "nvr +FloatermHide {}"
 
+
 class RunBlackVerb(CommandVerb):
-    map = 'B'
-    def when(ctx):
+    map = "B"
+
+    def show(self, ctx):
         return whenfile(ctx) and ctx.path.endswith(".py")
+
     command = "black {}"
 
 
-app.go("~/byrd/warehouse/requirements.txt")
-app.main()
+if __name__ == "__main__":
+    app = App()
+    app.go("~/byrd/warehouse/requirements.txt")
+    app.main()
