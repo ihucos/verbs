@@ -165,9 +165,6 @@ class App(AppGUIMixin):
             return f"{self.path} line {self.line}"
 
 
-
-
-
 class ShowIfGitMixin:
     def show(self):
         return self.app.git
@@ -331,7 +328,6 @@ class FilterVerb(Verb):
 
     def handle(self, match):
         self.app.go(match)
-
 
 
 class FindLines(FilterVerb):
