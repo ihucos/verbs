@@ -216,7 +216,7 @@ class CommandVerb(Verb):
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
-    help = "Up"
+    help = "Go up"
     map = "u"
 
     def __call__(self, app):
@@ -241,7 +241,7 @@ class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
 
 
 class BackVerb(Verb):
-    help = "Back"
+    help = "Go back"
     map = "b"
 
     def show(self, app):
@@ -261,9 +261,8 @@ class QuitVerb(Verb):
 
 
 class CdHomeVerb(Verb):
-    help = "Goto home"
     map = "h"
-    help = "Home"
+    help = "Go Home"
 
     def show(self, app):
         return app.path != os.path.expanduser("~")
@@ -277,7 +276,7 @@ class CdHomeVerb(Verb):
 
 
 class CdGitRootVerb(Verb):
-    help = "Git root"
+    help = "Go project root"
     map = "p"
 
     def show(self, app):
