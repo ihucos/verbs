@@ -34,56 +34,78 @@ class AppGUIMixin:
         # Clear screen
         stdscr.clear()
 
-        needed_lines = max(len(verbs) + 2 + self.frame_extra_height, 10)
-        needed_width = max(len(self.path), 50) + self.frame_extra_lenght
+        #needed_lines = max(len(verbs) + 2 + self.frame_extra_height, 10)
+        needed_width = 50 + self.frame_extra_lenght
         available_lines, available_width = stdscr.getmaxyx()
 
-        if needed_lines < available_lines:
-            pad_top = floor((available_lines - needed_lines) / 2)
-        else:
-            pad_top = 0
+        #if needed_lines < available_lines:
+        #    pad_top = floor((available_lines - needed_lines) / 2)
+        #else:
+        #    pad_top = 0
 
-        if needed_width < available_width:
-            pad_left = floor((available_width - needed_width) / 2)
-        else:
-            pad_left = 1
+        #if needed_width < available_width:
+            #pad_left = floor((available_width - needed_width) / 2)
+        #else:
+            #pad_left = 1
 
+        pad_top = 2
+        pad_left = 2
+        needed_width = 32
+ 
         c = pad_top
 
-        # stdscr.addstr(c, pad_left, "█" * needed_width)
-        # c += 1
+        #stdscr.addstr(c, pad_left, "█" * needed_width)
+        #c += 1
 
-        stdscr.addstr(c, pad_left, self._frame(f"{self.path}", needed_width))
-        c += 1
+        if app.git:
+            stdscr.addstr(c, pad_left, self._frame('`'+app.git+'/', needed_width))
+            c += 1
+            stdscr.addstr(c, pad_left, self._frame(' '+os.path.relpath(app.path, app.git)+'`', needed_width))
+            c += 1
+        else:
+            stdscr.addstr(c, pad_left, self._frame('`'+app.path+'`', needed_width))
+            c += 1
+            stdscr.addstr(c, pad_left, self._frame("", needed_width))
+            c += 1
 
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
+        c += 1
+
+        stdscr.addstr(c, pad_left, self._frame("┌─────────────────────┐", needed_width))
+        c += 1
+        stdscr.addstr(c, pad_left, self._frame("│        Menu         │", needed_width))
+        c += 1
+        stdscr.addstr(c, pad_left, self._frame("├─────────────────────┤", needed_width))
         c += 1
 
         last_section = None
         for index, verb in enumerate(verbs):
 
             section = verb.get_section(self)
-            if section != last_section:
-                stdscr.addstr(c, pad_left, self._frame("", needed_width))
-                c += 1
-                stdscr.addstr(
-                    c,
-                    pad_left,
-                    self._frame(f"{section.capitalize():}", needed_width),
-                )
-                c += 1
+            #if section != last_section:
+            #    stdscr.addstr(c, pad_left, self._frame("", needed_width))
+            #    c += 1
+            #    stdscr.addstr(
+            #        c,
+            #        pad_left,
+            #        self._frame(f"  {section:}", needed_width),
+            #    )
+            #    c += 1
 
             if index == self.arrow:
-                a = "  *"
+                a = "*"
             else:
-                a = f"   "
-            help = verb.get_help(self)
+                a = f" "
+            help = verb.get_help(self) + ' '
             stdscr.addstr(
-                c, pad_left, self._frame(a + f"[{verb.map}] {help}", needed_width),
+                c, pad_left, self._frame('│ ' + a + f"{help:·<16} {verb.map} │", needed_width),
             )
             c += 1
 
             last_section = section
+
+        stdscr.addstr(c, pad_left, self._frame("╰─────────────────────┘", needed_width))
+        c += 1
 
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
@@ -214,7 +236,14 @@ def not_(mixin):
 
 
 class ShowIfGitMixin:
-    section = "git project"
+
+    def get_section(self, app):
+        #origin = app.output('git config --get remote.origin.url', shell=True)
+        #if origin.startswith('git@github.com:'):
+        #    origin = origin[len('git@github.com:'):-len('.git')]
+        #return f'Git {origin}'
+        #return f'Git {app.git}'
+        return 'Git'
 
     def show(self, app):
         return app.git
@@ -223,17 +252,32 @@ class ShowIfGitMixin:
 class ShowIfFileMixin:
 
     def get_section(self, app):
-        return f'File {app.path}'
+        #if app.git:
+        #    path = os.path.relpath(app.path, app.git)
+        #else:
+        #    path = app.path
+        #return f'File {path}'
+        #file = os.path.basename(app.path)
+        #return f'File {file}'
+        return 'File'
 
     def show(self, app):
         return os.path.isfile(app.path)
 
 
 class ShowIfDirMixin:
-    section = "directory"
+
+    def get_section(self, app):
+        #if app.git:
+        #    dir = os.path.relpath(app.dir, app.git)
+        #else:
+        #    dir = app.dir
+        #return f'Directory {app.dir}'
+        return 'Directory'
 
     def show(self, app):
-        return os.path.isdir(app.path)
+        return True
+        #return os.path.isdir(app.path)
 
 
 class Verb:
@@ -263,9 +307,11 @@ class FindGitFileVerb(ShowIfGitMixin, Verb):
     map = "f"
 
     def __call__(self, app):
-        app.outputgo(
+        path = app.output(
             "git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=app.git
         )
+
+        app.go(os.path.join(app.git, path))
 
 
 class FindFilesVerb(ShowIfDirMixin, Verb):
@@ -285,22 +331,20 @@ class ListDirsVerb(ShowIfDirMixin, Verb):
         app.outputgo("ls | fzf", shell=True)
 
 
-class ParentDirVerb(Verb):
+class ParentDirVerb(ShowIfDirMixin, Verb):
     help = "Up"
     map = "u"
-    section = "navigation"
-
-    def show(self, app):
-        return app.path != "/"
 
     def __call__(self, app):
-        newpath = os.path.dirname(app.path)
+        newpath = os.path.dirname(app.dir)
         app.go(newpath)
 
 
 class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
     help = "Find projects"
     map = "P"
+
+    get_section = ShowIfDirMixin.get_section
 
     def __call__(self, app):
         match = app.output(
@@ -338,6 +382,9 @@ class CdHomeVerb(Verb):
     section = "navigation"
     help = "Home"
 
+    def show(self, app):
+        return app.path != os.path.expanduser('~')
+
     # def get_help(self, app):
     #    home =  os.path.expanduser('~')
     #    return f'{home}'
@@ -368,6 +415,9 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
     command = "less {}"
     help = "View"
 
+    def get_help(self, app):
+        return 'Pager'
+
 
 class RunBashVerb(ShowIfDirMixin, CommandVerb):
     map = "s"
@@ -378,14 +428,16 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
     command = "nvr +FloatermHide {}"
-    help = "Edit"
+    #help = "Edit"
+    def get_help(self, app):
+        return 'Edit'
 
 
 class RunBlackVerb(CommandVerb):
     map = "B"
 
     def show(self, app):
-        return ShowIfDirMixin().show(app) and app.path.endswith(".py")
+        return not ShowIfDirMixin().show(app) and app.path.endswith(".py")
 
     command = "black {}"
 
