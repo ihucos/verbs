@@ -53,7 +53,7 @@ class AppGUIMixin:
         # stdscr.addstr(c, pad_left, "█" * needed_width)
         # c += 1
 
-        stdscr.addstr(c, pad_left, self._frame(f"  {self.path}", needed_width))
+        stdscr.addstr(c, pad_left, self._frame(f"{self.path}", needed_width))
         c += 1
 
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
@@ -61,22 +61,25 @@ class AppGUIMixin:
 
         last_section = None
         for index, verb in enumerate(verbs):
-            section = (verb.show.__doc__ or 'other')
 
+            section = verb.get_section(self)
             if section != last_section:
                 stdscr.addstr(c, pad_left, self._frame("", needed_width))
                 c += 1
                 stdscr.addstr(
-                    c, pad_left, self._frame(f"{section}:", needed_width),
+                    c,
+                    pad_left,
+                    self._frame(f"{section.capitalize():}", needed_width),
                 )
                 c += 1
 
             if index == self.arrow:
-                a = ". "
+                a = "  *"
             else:
-                a = "  "
+                a = f"   "
+            help = verb.get_help(self)
             stdscr.addstr(
-                c, pad_left, self._frame(a + f"{verb.help}".ljust(32) + f"[{verb.map}]", needed_width),
+                c, pad_left, self._frame(a + f"[{verb.map}] {help}", needed_width),
             )
             c += 1
 
@@ -114,37 +117,34 @@ class AppGUIMixin:
             for verb in inheritors(Verb):
                 verb_obj = verb()
                 show = verb_obj.show(self)
-                print (verb_obj, show)
                 if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
-            #assert 0, verbs
-            verbs.sort(key=lambda v: (v.show.__doc__ or 'other', v.help))
+            # assert 0, verbs
+            verbs.sort(key=lambda v: (v.get_section(self), v.get_help(self)))
 
             key = self.draw(verbs)
 
             if key in ("j", "KEY_DOWN"):
                 self.arrow = min(self.arrow + 1, len(verbs) - 1)
-                continue
             elif key in ("k", "KEY_UP"):
                 self.arrow = max(self.arrow - 1, 0)
-                continue
             elif key == "\n":
                 verb = list(verbs)[self.arrow]
                 try:
                     verb(self)
                 except subprocess.CalledProcessError as exc:
                     print(exc)
-
-            keyfound = False
-            for verb in verbs:
-                if verb.map == key:
-                    keyfound = True
-                    try:
-                        verb(self)
-                    except subprocess.CalledProcessError as exc:
-                        print(exc)
-            if not keyfound:
-                self.flicker()
+            else:
+                keyfound = False
+                for verb in verbs:
+                    if verb.map == key:
+                        keyfound = True
+                        try:
+                            verb(self)
+                        except subprocess.CalledProcessError as exc:
+                            print(exc)
+                if not keyfound:
+                    self.flicker()
 
     def main(self):
         try:
@@ -161,13 +161,16 @@ class App(AppGUIMixin):
         self.path = None
 
     def go(self, path, savehist=True):
+
+        path = os.path.expanduser(path)
+
         if self.path and savehist:
             self.hist.append(self.path)
 
         if self.path:
             path = os.path.join(self.path, path)
 
-        self.path = os.path.abspath(os.path.expanduser(path))
+        self.path = os.path.abspath(path)
         if os.path.isdir(self.path):
             self.dir = self.path
         else:
@@ -193,60 +196,70 @@ class App(AppGUIMixin):
         path = self.output(*args, **kwargs)
         self.go(path)
 
+
 def and_(*show_mixins):
     class Tmp:
         def show(self, app):
             return all(i().show(app) for i in show_mixins)
+
     return Tmp
+
 
 def not_(mixin):
     class Tmp:
         def show(self, app):
             return not mixin().show(app)
+
     return Tmp
 
 
 class ShowIfGitMixin:
+    section = "git project"
+
     def show(self, app):
-        'git'
         return app.git
 
 
 class ShowIfFileMixin:
+
+    def get_section(self, app):
+        return f'File {app.path}'
+
     def show(self, app):
-        'file'
         return os.path.isfile(app.path)
 
 
 class ShowIfDirMixin:
+    section = "directory"
+
     def show(self, app):
-        'dir'
         return os.path.isdir(app.path)
 
 
 class Verb:
+    section = "other"
+
     def show(self, app):
-        'other'
         return True
 
-    @property
-    def help(self):
+    def get_help(self, app):
         return getattr(self, "help", self.__class__.__name__)
+
+    def get_section(self, app):
+        return self.section
 
 
 class CommandVerb(Verb):
-    @property
-    def help(self):
+    def get_help(self, app):
         return f"Run `{self.command}`"
 
     def __call__(self, app):
-        def __call__(self, app):
-            run = shlex.quote(app.path)
-            app.run(self.command.format(run))
+        run = shlex.quote(app.path)
+        app.run(self.command.format(run), shell=True)
 
 
 class FindGitFileVerb(ShowIfGitMixin, Verb):
-    help = "Find git files"
+    help = "Find files"
     map = "f"
 
     def __call__(self, app):
@@ -264,31 +277,21 @@ class FindFilesVerb(ShowIfDirMixin, Verb):
 
 
 class ListDirsVerb(ShowIfDirMixin, Verb):
-    help = "List dir"
+    help = "ls"
     map = "l"
+    section = "navigation"
 
     def __call__(self, app):
         app.outputgo("ls | fzf", shell=True)
 
 
 class ParentDirVerb(Verb):
-    help = 'Goto parent dir'
+    help = "Up"
     map = "u"
+    section = "navigation"
 
     def show(self, app):
-        return app.path != '/'
-
-    def __call__(self, app):
-        newpath = os.path.dirname(app.path)
-        app.go(newpath)
-
-
-class GotoGitRootVerb(Verb):
-    help = "Goto git root"
-    map = "p"
-
-    def show(self, app):
-        return app.git and not app.path == app.git
+        return app.path != "/"
 
     def __call__(self, app):
         newpath = os.path.dirname(app.path)
@@ -309,8 +312,9 @@ class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
 
 
 class BackVerb(Verb):
-    help = "Go back"
+    help = "Back"
     map = "b"
+    section = "navigation"
 
     def show(self, app):
         return app.hist
@@ -328,6 +332,32 @@ class QuitVerb(Verb):
         sys.exit(0)
 
 
+class CdHomeVerb(Verb):
+    help = "Goto home"
+    map = "h"
+    section = "navigation"
+    help = "Home"
+
+    # def get_help(self, app):
+    #    home =  os.path.expanduser('~')
+    #    return f'{home}'
+
+    def __call__(self, app):
+        app.go("~")
+
+
+class CdGitRootVerb(Verb):
+    help = "Git root"
+    map = "p"
+    section = "navigation"
+
+    def show(self, app):
+        return app.git and not app.path == app.git
+
+    def __call__(self, app):
+        app.go(app.git)
+
+
 class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
     map = "g"
     command = "lazygit"
@@ -336,16 +366,19 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "x"
     command = "less {}"
+    help = "View"
 
 
 class RunBashVerb(ShowIfDirMixin, CommandVerb):
     map = "s"
     command = "bash"
+    # help = 'Open shell here'
 
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
     command = "nvr +FloatermHide {}"
+    help = "Edit"
 
 
 class RunBlackVerb(CommandVerb):
