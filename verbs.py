@@ -77,20 +77,7 @@ class AppGUIMixin:
         stdscr.addstr(c, pad_left, self._frame("Commands", needed_width))
         c += 1
 
-        last_section = None
         for index, verb in enumerate(verbs):
-
-            section = verb.get_section(self)
-            # if section != last_section:
-            #    stdscr.addstr(c, pad_left, self._frame("", needed_width))
-            #    c += 1
-            #    stdscr.addstr(
-            #        c,
-            #        pad_left,
-            #        self._frame(f"  {section:}", needed_width),
-            #    )
-            #    c += 1
-
             if index == self.arrow:
                 a = "->"
             else:
@@ -100,8 +87,6 @@ class AppGUIMixin:
                 c, pad_left, self._frame(f" {a} {verb.map} - {help}", needed_width),
             )
             c += 1
-
-            last_section = section
 
         # curses.curs_set(0)
         stdscr.move(1, len(self.path_repr()) + 5)
@@ -133,7 +118,7 @@ class AppGUIMixin:
                 if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
             # assert 0, verbs
-            verbs.sort(key=lambda v: (v.get_section(self), v.get_help(self)))
+            verbs.sort(key=lambda v: v.get_help(self))
 
             key = self.draw(verbs)
 
@@ -215,7 +200,7 @@ class App(AppGUIMixin):
         if self.line is None:
             return self.path
         else:
-            return f'{self.path} line {self.line}'
+            return f"{self.path} line {self.line}"
 
 
 def and_(*show_mixins):
@@ -235,58 +220,27 @@ def not_(mixin):
 
 
 class ShowIfGitMixin:
-    def get_section(self, app):
-        # origin = app.output('git config --get remote.origin.url', shell=True)
-        # if origin.startswith('git@github.com:'):
-        #    origin = origin[len('git@github.com:'):-len('.git')]
-        # return f'Git {origin}'
-        # return f'Git {app.git}'
-        return "Git"
-
     def show(self, app):
         return app.git
 
 
 class ShowIfFileMixin:
-    def get_section(self, app):
-        # if app.git:
-        #    path = os.path.relpath(app.path, app.git)
-        # else:
-        #    path = app.path
-        # return f'File {path}'
-        # file = os.path.basename(app.path)
-        # return f'File {file}'
-        return "File"
-
     def show(self, app):
         return os.path.isfile(app.path)
 
 
 class ShowIfDirMixin:
-    def get_section(self, app):
-        # if app.git:
-        #    dir = os.path.relpath(app.dir, app.git)
-        # else:
-        #    dir = app.dir
-        # return f'Directory {app.dir}'
-        return "Directory"
-
     def show(self, app):
         return True
         # return os.path.isdir(app.path)
 
 
 class Verb:
-    section = "other"
-
     def show(self, app):
         return True
 
     def get_help(self, app):
         return getattr(self, "help", self.__class__.__name__)
-
-    def get_section(self, app):
-        return self.section
 
 
 class CommandVerb(Verb):
@@ -296,8 +250,6 @@ class CommandVerb(Verb):
     def __call__(self, app):
         run = shlex.quote(app.path)
         app.run(self.command.format(run), shell=True)
-
-
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -316,8 +268,6 @@ class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
     help = "Find projects"
     map = "P"
 
-    get_section = ShowIfDirMixin.get_section
-
     def __call__(self, app):
         match = app.output(
             """find -name .git -maxdepth 4 2>/dev/null |
@@ -330,7 +280,6 @@ class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
 class BackVerb(Verb):
     help = "Back"
     map = "b"
-    section = "navigation"
 
     def show(self, app):
         return app.hist
@@ -351,7 +300,6 @@ class QuitVerb(Verb):
 class CdHomeVerb(Verb):
     help = "Goto home"
     map = "h"
-    section = "navigation"
     help = "Home"
 
     def show(self, app):
@@ -368,7 +316,6 @@ class CdHomeVerb(Verb):
 class CdGitRootVerb(Verb):
     help = "Git root"
     map = "p"
-    section = "navigation"
 
     def show(self, app):
         return app.git and not app.path == app.git
@@ -421,19 +368,18 @@ class FilterVerb(Verb):
     def parse(self, stri):
         return stri
 
-     
     def __call__(self, app):
-        fzf = ['fzf']
+        fzf = ["fzf"]
         for key, val in self.fzf.items():
-            key = key.replace('_', '-')
+            key = key.replace("_", "-")
             if val is True:
-                fzf.append(f'--{key}')
+                fzf.append(f"--{key}")
             else:
-                fzf.append(f'--{key}={val}')
+                fzf.append(f"--{key}={val}")
 
         fzf_cmd = shlex.join(fzf)
         command = self.get_command(app)
-        cmd = f'{command} | {fzf_cmd}'
+        cmd = f"{command} | {fzf_cmd}"
         out = app.output(cmd, shell=True)
         self.handle(app, out)
 
@@ -445,8 +391,8 @@ class FilterVerb(Verb):
 
 
 class FindLines(FilterVerb):
-    help = 'Find lines'
-    map='L'
+    help = "Find lines"
+    map = "L"
     fzf = dict(
         tac=True,
         exact=True,
@@ -460,38 +406,39 @@ class FindLines(FilterVerb):
 
     def get_command(self, app):
         if app.path == app.dir:
-            return 'ag .'
+            return "ag ."
         else:
-            return 'ag . {}'.format(shlex.quote(app.path))
+            return "ag . {}".format(shlex.quote(app.path))
 
     def handle(self, app, match):
         if app.path == app.dir:
-            file, line, _ = match.split(':', 2)
+            file, line, _ = match.split(":", 2)
             app.go(file, line)
         else:
-            line, _ = match.split(':', 1)
+            line, _ = match.split(":", 1)
             app.go(app.path, line)
 
 
 class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
     help = "Find project files"
     map = "f"
-    fzf = dict(preview='cat -n {}')
-    command = 'git ls-files'
+    fzf = dict(preview="cat -n {}")
+    command = "git ls-files"
+
 
 class FindFilesVerb(ShowIfDirMixin, FilterVerb):
     help = "Find files"
     map = "G"
-    fzf = dict(preview='cat -n {}')
-    command='find . -type f'
+    fzf = dict(preview="cat -n {}")
+    command = "find . -type f"
 
 
 class ListDirsVerb(ShowIfDirMixin, FilterVerb):
     help = "ls"
     map = "l"
-    section = "navigation"
     fzf = dict(ansi=True)
-    command = 'ls --color=always'
+    command = "ls --color=always"
+
 
 if __name__ == "__main__":
     app = App()
