@@ -298,33 +298,6 @@ class CommandVerb(Verb):
         app.run(self.command.format(run), shell=True)
 
 
-class FindGitFileVerb(ShowIfGitMixin, Verb):
-    help = "Find files"
-    map = "f"
-
-    def __call__(self, app):
-        path = app.output(
-            "git ls-files | fzf --preview 'cat -n {}'", shell=True, cwd=app.git
-        )
-
-        app.go(os.path.join(app.git, path))
-
-
-class FindFilesVerb(ShowIfDirMixin, Verb):
-    help = "Find files"
-    map = "G"
-
-    def __call__(self, app):
-        app.outputgo("find . -type f | fzf --preview 'cat -n {}'", shell=True)
-
-
-class ListDirsVerb(ShowIfDirMixin, Verb):
-    help = "ls"
-    map = "l"
-    section = "navigation"
-
-    def __call__(self, app):
-        app.outputgo("ls | fzf", shell=True)
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -443,6 +416,8 @@ class RunBlackVerb(CommandVerb):
 
 class FilterVerb(Verb):
 
+    fzf = {}
+
     def parse(self, stri):
         return stri
 
@@ -461,6 +436,12 @@ class FilterVerb(Verb):
         cmd = f'{command} | {fzf_cmd}'
         out = app.output(cmd, shell=True)
         self.handle(app, out)
+
+    def handle(self, app, match):
+        app.go(match)
+
+    def get_command(self, app):
+        return self.command
 
 
 class FindLines(FilterVerb):
@@ -491,6 +472,26 @@ class FindLines(FilterVerb):
             line, _ = match.split(':', 1)
             app.go(app.path, line)
 
+
+class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
+    help = "Find project files"
+    map = "f"
+    fzf = dict(preview='cat -n {}')
+    command = 'git ls-files'
+
+class FindFilesVerb(ShowIfDirMixin, FilterVerb):
+    help = "Find files"
+    map = "G"
+    fzf = dict(preview='cat -n {}')
+    command='find . -type f'
+
+
+class ListDirsVerb(ShowIfDirMixin, FilterVerb):
+    help = "ls"
+    map = "l"
+    section = "navigation"
+    fzf = dict(ansi=True)
+    command = 'ls --color=always'
 
 if __name__ == "__main__":
     app = App()
