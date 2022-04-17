@@ -47,8 +47,7 @@ class AppGUIMixin:
                 a = "->"
             else:
                 a = "  "
-            help = verb.get_help(self) + " "
-            stdscr.addstr(c, pad_left, f" {a} {verb.map} - {help}")
+            stdscr.addstr(c, pad_left, f" {a} {verb.map} - {verb.help}")
             c += 1
 
         # curses.curs_set(0)
@@ -76,12 +75,12 @@ class AppGUIMixin:
 
             verbs = []
             for verb in inheritors(Verb):
-                verb_obj = verb()
-                show = verb_obj.show(self)
+                verb_obj = verb(self)
+                show = verb_obj.show()
                 if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
             # assert 0, verbs
-            verbs.sort(key=lambda v: v.get_help(self))
+            verbs.sort(key=lambda v: v.help)
 
             key = self.draw(verbs)
 
@@ -92,7 +91,7 @@ class AppGUIMixin:
             elif key == "\n":
                 verb = list(verbs)[self.arrow]
                 try:
-                    verb(self)
+                    verb()
                 except subprocess.CalledProcessError as exc:
                     print(exc)
             else:
@@ -101,7 +100,7 @@ class AppGUIMixin:
                     if verb.map == key:
                         keyfound = True
                         try:
-                            verb(self)
+                            verb()
                         except subprocess.CalledProcessError as exc:
                             print(exc)
                 if not keyfound:
@@ -166,97 +165,89 @@ class App(AppGUIMixin):
             return f"{self.path} line {self.line}"
 
 
-def and_(*show_mixins):
-    class Tmp:
-        def show(self, app):
-            return all(i().show(app) for i in show_mixins)
 
-    return Tmp
-
-
-def not_(mixin):
-    class Tmp:
-        def show(self, app):
-            return not mixin().show(app)
-
-    return Tmp
 
 
 class ShowIfGitMixin:
-    def show(self, app):
-        return app.git
+    def show(self):
+        return self.app.git
 
 
 class ShowIfFileMixin:
-    def show(self, app):
-        return os.path.isfile(app.path)
+    def show(self):
+        return os.path.isfile(self.app.path)
 
 
 class ShowIfDirMixin:
-    def show(self, app):
+    def show(self):
         return True
-        # return os.path.isdir(app.path)
+        # return os.path.isdir(self.app.path)
 
 
 class Verb:
-    def show(self, app):
+    def __init__(self, app):
+        self.app = app
+
+    def show(self):
         return True
 
-    def get_help(self, app):
+    @property
+    def help(self):
         return getattr(self, "help", self.__class__.__name__)
 
 
 class CommandVerb(Verb):
-    def get_help(self, app):
+    @property
+    def help(self):
         return f"Run `{self.command}`"
 
-    def __call__(self, app):
-        run = shlex.quote(app.path)
-        app.run(self.command.format(run), shell=True)
+    def __call__(self):
+        run = shlex.quote(self.app.path)
+        self.app.run(self.command.format(run), shell=True)
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
     help = "Go up"
     map = "u"
 
-    def __call__(self, app):
-        if app.line:
-            app.go(app.path)
+    def __call__(self):
+        if self.app.line:
+            self.app.go(app.path)
         else:
-            newpath = os.path.dirname(app.path)
-            app.go(newpath)
+            newpath = os.path.dirname(self.app.path)
+            self.app.go(newpath)
 
 
-class ListProjectsVerb(and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
+class ListProjectsVerb(Verb): #and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
     help = "Find projects"
     map = "P"
 
-    def __call__(self, app):
-        match = app.output(
+    def __call__(self):
+        match = self.app.output(
             """find -name .git -maxdepth 4 2>/dev/null |
                     xargs realpath | xargs dirname | fzf""",
             shell=True,
         )
-        app.go(match)
+        self.app.go(match)
 
 
 class BackVerb(Verb):
     help = "Go back"
     map = "b"
 
-    def show(self, app):
-        return app.hist
+    def show(self):
+        return self.app.hist
 
-    def __call__(self, app):
-        path, line = app.hist.pop(-1)
-        app.go(path, line, savehist=False)
+    def __call__(self):
+        path, line = self.app.hist.pop(-1)
+        self.app.go(path, line, savehist=False)
 
 
 class QuitVerb(Verb):
     help = "Quit"
     map = "q"
 
-    def __call__(self, app):
+    def __call__(self):
         sys.exit(0)
 
 
@@ -264,26 +255,22 @@ class CdHomeVerb(Verb):
     map = "h"
     help = "Go Home"
 
-    def show(self, app):
-        return app.path != os.path.expanduser("~")
+    def show(self):
+        return self.app.path != os.path.expanduser("~")
 
-    # def get_help(self, app):
-    #    home =  os.path.expanduser('~')
-    #    return f'{home}'
-
-    def __call__(self, app):
-        app.go("~")
+    def __call__(self):
+        self.app.go("~")
 
 
 class CdGitRootVerb(Verb):
     help = "Go project root"
     map = "p"
 
-    def show(self, app):
-        return app.git and not app.path == app.git
+    def show(self):
+        return self.app.git and not self.app.path == self.app.git
 
-    def __call__(self, app):
-        app.go(app.git)
+    def __call__(self):
+        self.app.go(self.app.git)
 
 
 class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
@@ -294,10 +281,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "x"
     command = "less {}"
-    help = "View"
-
-    def get_help(self, app):
-        return "Pager"
+    help = "Pager"
 
 
 class RunBashVerb(ShowIfDirMixin, CommandVerb):
@@ -309,16 +293,14 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
     command = "nvr +FloatermHide {}"
-    # help = "Edit"
-    def get_help(self, app):
-        return "Edit"
+    help = "Edit"
 
 
 class RunBlackVerb(CommandVerb):
     map = "B"
 
-    def show(self, app):
-        return not ShowIfDirMixin().show(app) and app.path.endswith(".py")
+    def show(self):
+        return not ShowIfDirMixin.show(self) and self.app.path.endswith(".py")
 
     command = "black {}"
 
@@ -330,7 +312,7 @@ class FilterVerb(Verb):
     def parse(self, stri):
         return stri
 
-    def __call__(self, app):
+    def __call__(self):
         fzf = ["fzf"]
         for key, val in self.fzf.items():
             key = key.replace("_", "-")
@@ -340,16 +322,13 @@ class FilterVerb(Verb):
                 fzf.append(f"--{key}={val}")
 
         fzf_cmd = shlex.join(fzf)
-        command = self.get_command(app)
-        cmd = f"{command} | {fzf_cmd}"
-        out = app.output(cmd, shell=True)
-        self.handle(app, out)
+        cmd = f"{self.command} | {fzf_cmd}"
+        out = self.app.output(cmd, shell=True)
+        self.handle(out)
 
-    def handle(self, app, match):
-        app.go(match)
+    def handle(self, match):
+        self.app.go(match)
 
-    def get_command(self, app):
-        return self.command
 
 
 class FindLines(FilterVerb):
@@ -366,19 +345,20 @@ class FindLines(FilterVerb):
         preview_window="bottom:10",
     )
 
-    def get_command(self, app):
-        if app.path == app.dir:
+    @property
+    def command(self):
+        if self.app.path == self.app.dir:
             return "ag ."
         else:
-            return "ag . {}".format(shlex.quote(app.path))
+            return "ag . {}".format(shlex.quote(self.app.path))
 
-    def handle(self, app, match):
-        if app.path == app.dir:
+    def handle(self, match):
+        if self.app.path == self.app.dir:
             file, line, _ = match.split(":", 2)
-            app.go(file, line)
+            self.app.go(file, line)
         else:
             line, _ = match.split(":", 1)
-            app.go(app.path, line)
+            self.app.go(self.app.path, line)
 
 
 class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
