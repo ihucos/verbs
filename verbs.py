@@ -218,9 +218,12 @@ class ParentDirVerb(ShowIfDirMixin, Verb):
             self.app.go(newpath)
 
 
-class ListProjectsVerb(Verb): #and_(not_(ShowIfGitMixin), ShowIfDirMixin), Verb):
+class ListProjectsVerb(Verb):
     help = "Find projects"
     map = "P"
+
+    def show(self):
+        return not ShowIfGitMixin.show(self) and ShowIfDirMixin.show(self)
 
     def __call__(self):
         match = self.app.output(
