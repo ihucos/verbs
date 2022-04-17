@@ -68,12 +68,13 @@ class AppGUIMixin:
         #    stdscr.addstr(c, pad_left, self._frame("", needed_width))
         #    c += 1
 
-        stdscr.addstr(c, 1, '> '+app.path+' ')
+        stdscr.addstr(c, 1, '-> '+app.path+' ')
         c += 1
+
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
 
-        stdscr.addstr(c, pad_left, self._frame(f"Commands", needed_width))
+        stdscr.addstr(c, pad_left, self._frame("Commands", needed_width))
         c += 1
 
         last_section = None
@@ -91,12 +92,12 @@ class AppGUIMixin:
             #    c += 1
 
             if index == self.arrow:
-                a = "*"
+                a = "->"
             else:
-                a = f" "
+                a = "  "
             help = verb.get_help(self) + ' '
             stdscr.addstr(
-                c, pad_left, self._frame('  ' + a + f"{verb.map} - {help}", needed_width),
+                c, pad_left, self._frame(f" {a} {verb.map} - {help}", needed_width),
             )
             c += 1
 
