@@ -22,59 +22,24 @@ def inheritors(klass):
 
 class AppGUIMixin:
 
-    frame_extra_lenght = 4
-    frame_extra_height = 3
     arrow = 0
-
-    def _frame(self, str, width):
-        # return "█ " + str.ljust(width - 4) + " █"
-        return str
 
     def _draw(self, stdscr, verbs):
         # Clear screen
         stdscr.clear()
 
-        # needed_lines = max(len(verbs) + 2 + self.frame_extra_height, 10)
-        needed_width = 23 + self.frame_extra_lenght
-        available_lines, available_width = stdscr.getmaxyx()
-
-        # if needed_lines < available_lines:
-        #    pad_top = floor((available_lines - needed_lines) / 2)
-        # else:
-        #    pad_top = 0
-
-        # if needed_width < available_width:
-        # pad_left = floor((available_width - needed_width) / 2)
-        # else:
-        # pad_left = 1
-
         pad_top = 1
         pad_left = 1
-        needed_width = 32
 
         c = pad_top
-
-        # stdscr.addstr(c, pad_left, "█" * needed_width)
-        # c += 1
-
-        # if app.git:
-        #    stdscr.addstr(c, pad_left, self._frame('`'+app.git+'/', needed_width))
-        #    c += 1
-        #    stdscr.addstr(c, pad_left, self._frame(' '+os.path.relpath(app.path, app.git)+'`', needed_width))
-        #    c += 1
-        # else:
-        #    stdscr.addstr(c, pad_left, self._frame('`'+app.path+'`', needed_width))
-        #    c += 1
-        #    stdscr.addstr(c, pad_left, self._frame("", needed_width))
-        #    c += 1
 
         stdscr.addstr(c, 1, "-> " + app.path_repr() + " ")
         c += 1
 
-        stdscr.addstr(c, pad_left, self._frame("", needed_width))
+        stdscr.addstr(c, pad_left, "")
         c += 1
 
-        stdscr.addstr(c, pad_left, self._frame("Commands", needed_width))
+        stdscr.addstr(c, pad_left, "Commands")
         c += 1
 
         for index, verb in enumerate(verbs):
@@ -83,9 +48,7 @@ class AppGUIMixin:
             else:
                 a = "  "
             help = verb.get_help(self) + " "
-            stdscr.addstr(
-                c, pad_left, self._frame(f" {a} {verb.map} - {help}", needed_width),
-            )
+            stdscr.addstr(c, pad_left, f" {a} {verb.map} - {help}")
             c += 1
 
         # curses.curs_set(0)
