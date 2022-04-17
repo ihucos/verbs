@@ -35,7 +35,7 @@ class AppGUIMixin:
         stdscr.clear()
 
         #needed_lines = max(len(verbs) + 2 + self.frame_extra_height, 10)
-        needed_width = 50 + self.frame_extra_lenght
+        needed_width = 23 + self.frame_extra_lenght
         available_lines, available_width = stdscr.getmaxyx()
 
         #if needed_lines < available_lines:
@@ -48,8 +48,8 @@ class AppGUIMixin:
         #else:
             #pad_left = 1
 
-        pad_top = 2
-        pad_left = 2
+        pad_top = 1
+        pad_left = 1
         needed_width = 32
  
         c = pad_top
@@ -57,25 +57,23 @@ class AppGUIMixin:
         #stdscr.addstr(c, pad_left, "█" * needed_width)
         #c += 1
 
-        if app.git:
-            stdscr.addstr(c, pad_left, self._frame('`'+app.git+'/', needed_width))
-            c += 1
-            stdscr.addstr(c, pad_left, self._frame(' '+os.path.relpath(app.path, app.git)+'`', needed_width))
-            c += 1
-        else:
-            stdscr.addstr(c, pad_left, self._frame('`'+app.path+'`', needed_width))
-            c += 1
-            stdscr.addstr(c, pad_left, self._frame("", needed_width))
-            c += 1
+        #if app.git:
+        #    stdscr.addstr(c, pad_left, self._frame('`'+app.git+'/', needed_width))
+        #    c += 1
+        #    stdscr.addstr(c, pad_left, self._frame(' '+os.path.relpath(app.path, app.git)+'`', needed_width))
+        #    c += 1
+        #else:
+        #    stdscr.addstr(c, pad_left, self._frame('`'+app.path+'`', needed_width))
+        #    c += 1
+        #    stdscr.addstr(c, pad_left, self._frame("", needed_width))
+        #    c += 1
 
+        stdscr.addstr(c, 1, '> '+app.path+' ')
+        c += 1
         stdscr.addstr(c, pad_left, self._frame("", needed_width))
         c += 1
 
-        stdscr.addstr(c, pad_left, self._frame("┌─────────────────────┐", needed_width))
-        c += 1
-        stdscr.addstr(c, pad_left, self._frame("│        Menu         │", needed_width))
-        c += 1
-        stdscr.addstr(c, pad_left, self._frame("├─────────────────────┤", needed_width))
+        stdscr.addstr(c, pad_left, self._frame(f"Commands", needed_width))
         c += 1
 
         last_section = None
@@ -98,22 +96,16 @@ class AppGUIMixin:
                 a = f" "
             help = verb.get_help(self) + ' '
             stdscr.addstr(
-                c, pad_left, self._frame('│ ' + a + f"{help:·<16} {verb.map} │", needed_width),
+                c, pad_left, self._frame('  ' + a + f"{verb.map} - {help}", needed_width),
             )
             c += 1
 
             last_section = section
 
-        stdscr.addstr(c, pad_left, self._frame("╰─────────────────────┘", needed_width))
-        c += 1
 
-        stdscr.addstr(c, pad_left, self._frame("", needed_width))
-        c += 1
 
-        # stdscr.addstr(c, pad_left, "█" * needed_width)
-        # c += 1
-
-        curses.curs_set(0)
+        #curses.curs_set(0)
+        stdscr.move(1, len(self.path)+4)
 
         stdscr.refresh()
         return stdscr.getkey()
