@@ -58,9 +58,9 @@ class AppGUIMixin:
 
         for index, verb in enumerate(verbs):
             if index == self.arrow:
-                a = '*'
+                a = "*"
             else:
-                a = ' '
+                a = " "
             stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help}")
             c += 1
 
@@ -117,8 +117,8 @@ class AppGUIMixin:
                         except subprocess.CalledProcessError as exc:
                             print(exc)
                 if not keyfound:
-                    self.flicker()
-
+                    if key != " ":  # hack for my vim setup
+                        self.flicker()
 
     def main(self):
         try:
@@ -163,9 +163,17 @@ class App(AppGUIMixin):
         resp = subprocess.check_output(*args, **kwargs)
         return resp.decode().strip("\n")
 
-    def run(self, *args, **kwargs):
+    def run(self, *args, anykey=False, **kwargs):
         kwargs.setdefault("cwd", self.dir)
         subprocess.Popen(*args, **kwargs).wait()
+        if anykey:
+            self.run(
+                [
+                    "/bin/bash",
+                    "-c",
+                    "read -rsp $'Press any key to continue...\n' -n1 key",
+                ]
+            )
 
     def outputgo(self, *args, **kwargs):
         kwargs.setdefault("cwd", self.dir)
@@ -208,14 +216,18 @@ class Verb:
 
 
 class CommandVerb(Verb):
+    anykey = False
+
     @property
     def help(self):
         return f"Run `{self.command}`"
 
     def __call__(self):
         run = shlex.quote(self.app.path)
-        line = shlex.quote(self.app.line or '0')
-        self.app.run(self.command.format(file=run, line=line), shell=True)
+        line = shlex.quote(self.app.line or "0")
+        self.app.run(
+            self.command.format(file=run, line=line), shell=True, anykey=self.anykey
+        )
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -307,17 +319,19 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
-    command = "nvr +FloatermHide {file} +{line}"
+    command = "nvr +FloatermHide; nvr {file} +{line}"
     help = "Edit"
 
 
 class RunBlackVerb(CommandVerb):
     map = "B"
 
-    def show(self):
-        return not ShowIfDirMixin.show(self) and self.app.path.endswith(".py")
+    anykey = True
 
-    command = "black {}"
+    def show(self):
+        return ShowIfFileMixin.show(self) and self.app.path.endswith(".py")
+
+    command = "black {file}"
 
 
 class FilterVerb(Verb):
@@ -332,7 +346,7 @@ class FilterVerb(Verb):
         fzf_opts = self.fzf.copy()
 
         if self.app.query:
-            fzf_opts['query'] = self.app.query
+            fzf_opts["query"] = self.app.query
 
         for key, val in fzf_opts.items():
             key = key.replace("_", "-")
@@ -384,7 +398,7 @@ class FindLines(FilterVerb):
         self.app.go(file, line)
 
 
-class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
+class FilterFilesVerb(FilterVerb):
     help = "Filter files"
     map = "f"
     fzf = dict(preview="cat -n {}")
@@ -419,8 +433,14 @@ class FilterTagsVerb(FilterVerb, ShowIfGitMixin):
 
 
 if __name__ == "__main__":
-    file, line, query = sys.argv[1:]
     app = App()
-    app.go(file, line)
-    app.query = query
+    try:
+        file, line, query = sys.argv[1:]
+        try:
+            app.go(file, line)
+        except FileNotFoundError:
+            app.go('~')
+        app.query = query
+    except ValueError:
+        app.go("~")
     app.main()
