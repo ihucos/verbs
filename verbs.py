@@ -253,7 +253,7 @@ class QuitVerb(Verb):
 
 class CdHomeVerb(Verb):
     map = "h"
-    help = "Go Home"
+    help = "Go home"
 
     def show(self):
         return self.app.path != os.path.expanduser("~")
@@ -322,16 +322,30 @@ class FilterVerb(Verb):
                 fzf.append(f"--{key}={val}")
 
         fzf_cmd = shlex.join(fzf)
-        cmd = f"{self.command} | {fzf_cmd}"
+        cmd = f"{self.files_command} | xargs -L1 {self.command} | {fzf_cmd}"
         out = self.app.output(cmd, shell=True)
         self.handle(out)
 
     def handle(self, match):
         self.app.go(match)
 
+    command = 'echo'
+
+    @property
+    def files_command(self):
+        if self.app.dir != self.app.path:
+            return "echo {}".format(shlex.quote(self.app.path))
+
+        if self.app.git == self.app.dir:
+            return 'git ls-files'
+
+        if self.app.path == self.app.dir:
+            return "find . -type f"
+
+
 
 class FindLines(FilterVerb):
-    help = "Find lines"
+    help = "Filter lines"
     map = "L"
     fzf = dict(
         tac=True,
@@ -344,41 +358,44 @@ class FindLines(FilterVerb):
         preview_window="bottom:10",
     )
 
-    @property
-    def command(self):
-        if self.app.path == self.app.dir:
-            return "ag ."
-        else:
-            return "ag . {}".format(shlex.quote(self.app.path))
+    command = 'grep --line-number --with-filename .'
 
     def handle(self, match):
-        if self.app.path == self.app.dir:
-            file, line, _ = match.split(":", 2)
-            self.app.go(file, line)
-        else:
-            line, _ = match.split(":", 1)
-            self.app.go(self.app.path, line)
+        file, line, _ = match.split(":", 2)
+        self.app.go(file, line)
 
 
 class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
-    help = "Find project files"
+    help = "Filter files"
     map = "f"
     fzf = dict(preview="cat -n {}")
-    command = "git ls-files"
 
-
-class FindFilesVerb(ShowIfDirMixin, FilterVerb):
-    help = "Find files"
-    map = "G"
-    fzf = dict(preview="cat -n {}")
-    command = "find . -type f"
-
-
-class ListDirsVerb(ShowIfDirMixin, FilterVerb):
+class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     help = "ls"
     map = "l"
     fzf = dict(ansi=True)
-    command = "ls --color=always"
+    files_command = "ls --color=always"
+
+
+class FilterTagsVerb(FilterVerb, ShowIfGitMixin):
+    map = "t"
+    help = "Filter tags"
+    fzf = dict(
+        exact=True,
+        delimiter="\t",
+        with_nth=1,
+        nth=1,
+        preview='a={3}; printf {2}"\n"; cat -n {2} | tail --quiet -n +${a::-2}',
+        preview_window="right:70%",
+    )
+
+    command = "xargs ctags --excmd=number -f - "
+
+    def handle(self, match):
+        i = match.split("\t")
+        file = i[1]
+        line = i[2]
+        self.app.go(file, line.strip(';"'))
 
 
 if __name__ == "__main__":
