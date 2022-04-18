@@ -23,6 +23,7 @@ def inheritors(klass):
 class AppGUIMixin:
 
     arrow = 0
+    query = None
 
     def _draw(self, stdscr, verbs):
         # Clear screen
@@ -33,25 +34,37 @@ class AppGUIMixin:
 
         c = pad_top
 
-        stdscr.addstr(c, 1, "-> " + app.path_repr() + " ")
+        stdscr.addstr(c, 1, "Scope")
+        c += 1
+
+        stdscr.addstr(c, 1, "  " + app.path_repr() + " ")
         c += 1
 
         stdscr.addstr(c, pad_left, "")
         c += 1
 
-        stdscr.addstr(c, pad_left, "Commands")
-        c += 1
+        if self.query:
+            stdscr.addstr(c, 1, "Query")
+            c += 1
+
+            stdscr.addstr(c, 1, "  " + self.query + " ")
+            c += 1
+
+            stdscr.addstr(c, pad_left, "")
+            c += 1
+
+            stdscr.addstr(c, pad_left, "Commands")
+            c += 1
 
         for index, verb in enumerate(verbs):
             if index == self.arrow:
-                a = "->"
+                a = '*'
             else:
-                a = "  "
-            stdscr.addstr(c, pad_left, f" {a} {verb.map} - {verb.help}")
+                a = ' '
+            stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help}")
             c += 1
 
-        # curses.curs_set(0)
-        stdscr.move(1, len(self.path_repr()) + 5)
+        curses.curs_set(0)
 
         stdscr.refresh()
         return stdscr.getkey()
@@ -105,6 +118,7 @@ class AppGUIMixin:
                             print(exc)
                 if not keyfound:
                     self.flicker()
+
 
     def main(self):
         try:
@@ -200,7 +214,8 @@ class CommandVerb(Verb):
 
     def __call__(self):
         run = shlex.quote(self.app.path)
-        self.app.run(self.command.format(run), shell=True)
+        line = shlex.quote(self.app.line or '0')
+        self.app.run(self.command.format(file=run, line=line), shell=True)
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -280,7 +295,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "x"
-    command = "less {}"
+    command = "less -N +{line} {file}"
     help = "Pager"
 
 
@@ -292,7 +307,7 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
-    command = "nvr +FloatermHide {}"
+    command = "nvr +FloatermHide {file} +{line}"
     help = "Edit"
 
 
@@ -314,7 +329,12 @@ class FilterVerb(Verb):
 
     def __call__(self):
         fzf = ["fzf"]
-        for key, val in self.fzf.items():
+        fzf_opts = self.fzf.copy()
+
+        if self.app.query:
+            fzf_opts['query'] = self.app.query
+
+        for key, val in fzf_opts.items():
             key = key.replace("_", "-")
             if val is True:
                 fzf.append(f"--{key}")
@@ -322,14 +342,14 @@ class FilterVerb(Verb):
                 fzf.append(f"--{key}={val}")
 
         fzf_cmd = shlex.join(fzf)
-        cmd = f"{self.files_command} | xargs -L1 {self.command} | {fzf_cmd}"
+        cmd = f"{self.files_command} | {self.command} | {fzf_cmd}"
         out = self.app.output(cmd, shell=True)
         self.handle(out)
 
     def handle(self, match):
         self.app.go(match)
 
-    command = 'echo'
+    command = "xargs -L1"
 
     @property
     def files_command(self):
@@ -337,16 +357,15 @@ class FilterVerb(Verb):
             return "echo {}".format(shlex.quote(self.app.path))
 
         if self.app.git == self.app.dir:
-            return 'git ls-files'
+            return "git ls-files"
 
         if self.app.path == self.app.dir:
             return "find . -type f"
 
 
-
 class FindLines(FilterVerb):
     help = "Filter lines"
-    map = "L"
+    map = "l"
     fzf = dict(
         tac=True,
         exact=True,
@@ -358,7 +377,7 @@ class FindLines(FilterVerb):
         preview_window="bottom:10",
     )
 
-    command = 'grep --line-number --with-filename .'
+    command = "xargs -L1 grep --line-number --with-filename ."
 
     def handle(self, match):
         file, line, _ = match.split(":", 2)
@@ -370,9 +389,10 @@ class FindGitFileVerb(ShowIfGitMixin, FilterVerb):
     map = "f"
     fzf = dict(preview="cat -n {}")
 
+
 class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     help = "ls"
-    map = "l"
+    map = "d"
     fzf = dict(ansi=True)
     files_command = "ls --color=always"
 
@@ -399,6 +419,8 @@ class FilterTagsVerb(FilterVerb, ShowIfGitMixin):
 
 
 if __name__ == "__main__":
+    file, line, query = sys.argv[1:]
     app = App()
-    app.go("~/byrd/warehouse/requirements.txt")
+    app.go(file, line)
+    app.query = query
     app.main()
