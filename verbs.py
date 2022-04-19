@@ -223,10 +223,13 @@ class CommandVerb(Verb):
         return f"Run `{self.command}`"
 
     def __call__(self):
-        run = shlex.quote(self.app.path)
+        path = shlex.quote(self.app.path)
+        dir = shlex.quote(self.app.dir)
         line = shlex.quote(self.app.line or "0")
         self.app.run(
-            self.command.format(file=run, line=line), shell=True, anykey=self.anykey
+            self.command.format(path=path, line=line, dir=dir),
+            shell=True,
+            anykey=self.anykey,
         )
 
 
@@ -256,6 +259,16 @@ class ListProjectsVerb(Verb):
             shell=True,
         )
         self.app.go(match)
+
+
+class ListByrdProjectsVerb(Verb):
+    help = "Find byrd projects"
+    map = "y"
+
+    def __call__(self):
+        app.go("~/byrd")
+        pv = ListProjectsVerb(self.app)
+        pv()
 
 
 class BackVerb(Verb):
@@ -289,6 +302,19 @@ class CdHomeVerb(Verb):
         self.app.go("~")
 
 
+class CdVimVerb(Verb):
+    map = "v"
+
+    @property
+    def _vimcwd(self):
+        return self.app.output("nvr --remote-expr 'getcwd()'", shell=True)
+
+    help = "Go vim cwd"
+
+    def __call__(self):
+        self.app.go(self._vimcwd)
+
+
 class CdGitRootVerb(Verb):
     help = "Go project root"
     map = "p"
@@ -307,7 +333,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "x"
-    command = "less -N +{line} {file}"
+    command = "less -N +{line} {path}"
     help = "Pager"
 
 
@@ -319,22 +345,29 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
-    command = "nvr +FloatermHide; nvr {file} +{line}"
+    command = "nvr +FloatermHide; nvr {path} +{line}"
     help = "Edit"
 
 
 class RunBlackVerb(CommandVerb):
     map = "B"
-
     anykey = True
 
     def show(self):
         return ShowIfFileMixin.show(self) and self.app.path.endswith(".py")
 
-    command = "black {file}"
+    command = "black {path}"
+
+
+class SetVimVerb(ShowIfDirMixin, CommandVerb):
+    map = "V"
+    command = "nvr -c 'cd {dir}'"
+    help = "Set vim cwd"
 
 
 class FilterVerb(Verb):
+
+    fill_query = True
 
     fzf = {}
 
@@ -345,7 +378,7 @@ class FilterVerb(Verb):
         fzf = ["fzf"]
         fzf_opts = self.fzf.copy()
 
-        if self.app.query:
+        if self.fill_query and self.app.query:
             fzf_opts["query"] = self.app.query
 
         for key, val in fzf_opts.items():
@@ -399,12 +432,14 @@ class FindLines(FilterVerb):
 
 
 class FilterFilesVerb(FilterVerb):
+    fill_query = False
     help = "Filter files"
     map = "f"
     fzf = dict(preview="cat -n {}")
 
 
 class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
+    fill_query = False
     help = "ls"
     map = "d"
     fzf = dict(ansi=True)
@@ -439,7 +474,9 @@ if __name__ == "__main__":
         try:
             app.go(file, line)
         except FileNotFoundError:
-            app.go('~')
+            app.go("~")
+            cwd = app.output("nvr --remote-expr 'getcwd()'", shell=True)
+            app.go(cwd)
         app.query = query
     except ValueError:
         app.go("~")
