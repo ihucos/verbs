@@ -92,7 +92,6 @@ class AppGUIMixin:
                 show = verb_obj.show()
                 if getattr(verb, "map", False) and show:
                     verbs.append(verb_obj)
-            # assert 0, verbs
             verbs.sort(key=lambda v: v.help)
 
             key = self.draw(verbs)
@@ -349,6 +348,12 @@ class RunEditVerb(ShowIfFileMixin, CommandVerb):
     help = "Edit"
 
 
+class RunVimVerb(ShowIfFileMixin, CommandVerb):
+    map = "E"
+    command = "vim {path} +{line}"
+    help = "vim"
+
+
 class RunBlackVerb(CommandVerb):
     map = "B"
     anykey = True
@@ -408,6 +413,54 @@ class FilterVerb(Verb):
 
         if self.app.path == self.app.dir:
             return "find . -type f"
+
+
+def cmd(c, *mixins):
+    """
+    Helper for CommandsVerb
+    """
+
+    class Tmp(*mixins, CommandVerb):
+        command = c
+
+    return Tmp
+
+
+class CommandsVerb(FilterVerb):
+
+    fill_query = False
+    anykey = True
+    map = "a"
+    help = "Filter command"
+    COMMANDS = [
+        cmd("file {path}"),
+        cmd("bash -lc startvpn"),
+        cmd("heroku run ./manage konch --app byrd-{pdir}-staging", ShowIfGitMixin),
+    ]
+
+    @property
+    def files_command(self):
+        echos = []
+        for c in self.COMMANDS:
+            cobj = c(self.app)
+            if cobj.show():
+                echos.append("echo {}".format(shlex.quote(cobj.command)))
+        echos.sort()
+        return "\n".join(["{"] + echos + ["}"])
+
+    def handle(self, match):
+        path = shlex.quote(self.app.path)
+        dir = shlex.quote(self.app.dir)
+        if self.app.git:
+            pdir = shlex.quote(os.path.basename(self.app.git))
+        else:
+            pdir = ""
+        line = shlex.quote(self.app.line or "0")
+        self.app.run(
+            match.format(path=path, line=line, dir=dir, pdir=pdir),
+            shell=True,
+            anykey=self.anykey,
+        )
 
 
 class FindLines(FilterVerb):
