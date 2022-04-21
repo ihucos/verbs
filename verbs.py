@@ -224,9 +224,20 @@ class CommandVerb(Verb):
     def __call__(self):
         path = shlex.quote(self.app.path)
         dir = shlex.quote(self.app.dir)
+        if self.app.git:
+            pdir = shlex.quote(os.path.basename(self.app.git))
+        else:
+            pdir = ""
         line = shlex.quote(self.app.line or "0")
+
+        if self.app.git:
+            relpath = shlex.quote(os.path.relpath(self.app.path, start=self.app.git))
+        else:
+            relpath = ""
         self.app.run(
-            self.command.format(path=path, line=line, dir=dir),
+            self.command.format(
+                path=path, line=line, dir=dir, pdir=pdir, relpath=relpath
+            ),
             shell=True,
             anykey=self.anykey,
         )
@@ -331,7 +342,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 
 
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
-    map = "x"
+    map = "o"
     command = "less -N +{line} {path}"
     help = "Pager"
 
@@ -364,10 +375,25 @@ class RunBlackVerb(CommandVerb):
     command = "black {path}"
 
 
+class RunTestVerb(CommandVerb):
+    map = "T"
+    anykey = True
+    command = "hans test {pdir} {relpath}"
+
+
 class SetVimVerb(ShowIfDirMixin, CommandVerb):
     map = "V"
     command = "nvr -c 'cd {dir}'"
     help = "Set vim cwd"
+
+
+class RunLastCommandVerb(CommandVerb):
+    map = "x"
+    anykey = True
+
+    @property
+    def command(self):
+        return self.app.output("cat ~/.bash_eternal_history  | tail -n 1", shell=True)
 
 
 class FilterVerb(Verb):
@@ -434,7 +460,9 @@ class CommandsVerb(FilterVerb):
     help = "Filter command"
     COMMANDS = [
         cmd("file {path}"),
+        cmd("xdg-open {path}"),
         cmd("bash -lc startvpn"),
+        cmd("hans run {pdir} ./manage konch"),
         cmd("heroku run ./manage konch --app byrd-{pdir}-staging", ShowIfGitMixin),
     ]
 
@@ -496,10 +524,10 @@ class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     help = "ls"
     map = "d"
     fzf = dict(ansi=True)
-    files_command = "ls --color=always"
+    files_command = "ls --color=always --all"
 
 
-class FilterTagsVerb(FilterVerb, ShowIfGitMixin):
+class FilterTagsVerb(FilterVerb):
     map = "t"
     help = "Filter tags"
     fzf = dict(
@@ -517,7 +545,19 @@ class FilterTagsVerb(FilterVerb, ShowIfGitMixin):
         i = match.split("\t")
         file = i[1]
         line = i[2]
+        self.app.query = i[0]
         self.app.go(file, line.strip(';"'))
+
+
+class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
+    fill_query = False
+    map = "r"
+    help = "Filter recent"
+    fzf = dict(preview="git diff develop {}")
+    files_command = """ {
+		git diff --name-only $(git merge-base --fork-point develop)..HEAD .
+		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
+	}"""
 
 
 if __name__ == "__main__":
