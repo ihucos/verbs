@@ -5,7 +5,6 @@ import curses
 import shlex
 from time import sleep
 from curses import wrapper
-from math import floor
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
 def inheritors(klass):
@@ -116,8 +115,7 @@ class AppGUIMixin:
                         except subprocess.CalledProcessError as exc:
                             print(exc)
                 if not keyfound:
-                    if key != " ":  # hack for my vim setup
-                        self.flicker()
+                    self.flicker()
 
     def main(self):
         try:
@@ -245,7 +243,7 @@ class CommandVerb(Verb):
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
     help = "Go up"
-    map = "u"
+    map = "."
 
     def __call__(self):
         if self.app.line:
@@ -359,6 +357,12 @@ class RunEditVerb(ShowIfFileMixin, CommandVerb):
     help = "Edit"
 
 
+class RunTabVerb(CommandVerb):
+    map = "c"
+    command = "nvr +FloatermHide; nvr +:tabnew"
+    help = "New tab"
+
+
 class RunVimVerb(ShowIfFileMixin, CommandVerb):
     map = "E"
     command = "vim {path} +{line}"
@@ -399,6 +403,7 @@ class RunLastCommandVerb(CommandVerb):
 class FilterVerb(Verb):
 
     fill_query = True
+    cwd = None
 
     fzf = {}
 
@@ -420,14 +425,22 @@ class FilterVerb(Verb):
                 fzf.append(f"--{key}={val}")
 
         fzf_cmd = shlex.join(fzf)
-        cmd = f"{self.files_command} | {self.command} | {fzf_cmd}"
-        out = self.app.output(cmd, shell=True)
+        if self.command:
+            cmd = f"{self.files_command} | {self.command} | {fzf_cmd}"
+        else:
+
+            cmd = f"{self.files_command} | {fzf_cmd}"
+
+        if self.cwd is None:
+            out = self.app.output(cmd, shell=True)
+        else:
+            out = self.app.output(cmd, shell=True, cwd=self.cwd)
         self.handle(out)
 
     def handle(self, match):
         self.app.go(match)
 
-    command = "xargs -L1"
+    command = None
 
     @property
     def files_command(self):
@@ -527,6 +540,24 @@ class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     files_command = "ls --color=always --all"
 
 
+class FilterVimBufferVerb(FilterVerb):
+    fill_query = False
+    help = "Filter vim buffers"
+    map = "b"
+    fzf = dict(ansi=True)
+    command = "grep -v '^term://'"
+    files_command = "nvr --remote-expr {}".format(
+        shlex.quote(
+            """join(filter(map(range(1,bufnr('$')), 'bufname(v:val)'), 'buflisted(v:val)'), '\n')"""
+        )
+    )
+
+    def handle(self, match):
+        vimcur = self.app.output("nvr --remote-expr 'getcwd()'", shell=True)
+        real = os.path.join(vimcur, match)
+        self.app.go(real)
+
+
 class FilterTagsVerb(FilterVerb):
     map = "t"
     help = "Filter tags"
@@ -553,11 +584,19 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     fill_query = False
     map = "r"
     help = "Filter recent"
+    command = 'sort | uniq'
     fzf = dict(preview="git diff develop {}")
     files_command = """ {
 		git diff --name-only $(git merge-base --fork-point develop)..HEAD .
 		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
 	}"""
+
+    @property
+    def cwd(self):
+        return self.app.git
+
+    def handle(self, match):
+        self.app.go(os.path.join(self.app.git, match))
 
 
 if __name__ == "__main__":
