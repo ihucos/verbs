@@ -382,7 +382,7 @@ class RunBlackVerb(CommandVerb):
 class RunTestVerb(CommandVerb):
     map = "T"
     anykey = True
-    command = "hans test {pdir} {relpath}"
+    command = "sh -cx hans\ test\ {pdir}\ {relpath}"
 
 
 class SetVimVerb(ShowIfDirMixin, CommandVerb):
