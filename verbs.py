@@ -1,10 +1,13 @@
 import os
+import atexit
 import subprocess
 import sys
 import curses
 import shlex
 from time import sleep
 from curses import wrapper
+from pathlib import Path
+import json
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
 def inheritors(klass):
@@ -130,6 +133,15 @@ class App(AppGUIMixin):
         self.maps = {}
         self.hist = []
         self.path = None
+
+    def savehist(self):
+        Path('~/.verbs_hist').write_text(json.dumps(self.hist))
+
+    def loadhist(self):
+        try:
+            self.path = json.loads(Path('~/.verbs_hist').read_text())
+        except FileNotFoundError:
+            pass
 
     def go(self, path, line=None, savehist=True):
 
@@ -281,7 +293,7 @@ class ListByrdProjectsVerb(Verb):
 
 class BackVerb(Verb):
     help = "Go back"
-    map = "b"
+    map = "u"
 
     def show(self):
         return self.app.hist
@@ -382,7 +394,7 @@ class RunBlackVerb(CommandVerb):
 class RunTestVerb(CommandVerb):
     map = "T"
     anykey = True
-    command = "sh -cx hans\ test\ {pdir}\ {relpath}"
+    command = "sh -cx hans\ test\ {pdir}\ {relpath}\ -vv"
 
 
 class SetVimVerb(ShowIfDirMixin, CommandVerb):
@@ -451,7 +463,7 @@ class FilterVerb(Verb):
             return "git ls-files"
 
         if self.app.path == self.app.dir:
-            return "find . -type f"
+            return "find . -type f 2>/dev/null"
 
 
 def cmd(c, *mixins):
@@ -506,7 +518,7 @@ class CommandsVerb(FilterVerb):
 
 class FindLines(FilterVerb):
     help = "Filter lines"
-    map = "l"
+    map = "/"
     fzf = dict(
         tac=True,
         exact=True,
@@ -601,6 +613,10 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
 
 if __name__ == "__main__":
     app = App()
+    app.loadhist()
+    @atexit.register
+    def onquit():
+        app.savehist()
     try:
         file, line, query = sys.argv[1:]
         try:
