@@ -39,7 +39,7 @@ class AppGUIMixin:
         stdscr.addstr(c, 1, "Scope")
         c += 1
 
-        stdscr.addstr(c, 1, "  " + app.path_repr() + " ")
+        stdscr.addstr(c, 1, "  " + self.path_repr() + " ")
         c += 1
 
         stdscr.addstr(c, pad_left, "")
@@ -133,13 +133,14 @@ class App(AppGUIMixin):
         self.maps = {}
         self.hist = []
         self.path = None
+        self.dir = None
 
     def savehist(self):
-        Path('~/.verbs_hist').write_text(json.dumps(self.hist))
+        Path('~/.verbs_hist').expanduser().write_text(json.dumps(self.hist))
 
     def loadhist(self):
         try:
-            self.path = json.loads(Path('~/.verbs_hist').read_text())
+            self.path = json.loads(Path('~/.verbs_hist').expanduser().read_text())
         except FileNotFoundError:
             pass
 
@@ -152,7 +153,7 @@ class App(AppGUIMixin):
         if self.path and savehist:
             self.hist.append((self.path, self.line))
 
-        if self.path:
+        if self.path and self.dir:
             path = os.path.join(self.dir, path)
 
         self.path = os.path.abspath(path)
@@ -226,6 +227,7 @@ class Verb:
 
 class CommandVerb(Verb):
     anykey = False
+    quit = False
 
     @property
     def help(self):
@@ -251,6 +253,8 @@ class CommandVerb(Verb):
             shell=True,
             anykey=self.anykey,
         )
+        if self.quit:
+            self.app.run("nvr +FloatClose", shell=True)
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -286,7 +290,7 @@ class ListByrdProjectsVerb(Verb):
     map = "y"
 
     def __call__(self):
-        app.go("~/byrd")
+        self.app.go("~/byrd")
         pv = ListProjectsVerb(self.app)
         pv()
 
@@ -364,15 +368,17 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
-    map = "e"
-    command = "nvr +FloatermHide; nvr {path} +{line}"
+    map = " "
+    command = "nvr +'wincmd p | e {path} | +{line}'"
     help = "Edit"
+    quit = True
 
 
 class RunTabVerb(CommandVerb):
     map = "c"
-    command = "nvr +FloatermHide; nvr +:tabnew"
+    command = "nvr +'wincmd p | tabnew'"
     help = "New tab"
+    quit = True
 
 
 class RunVimVerb(ShowIfFileMixin, CommandVerb):
@@ -547,7 +553,7 @@ class FilterFilesVerb(FilterVerb):
 class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     fill_query = False
     help = "ls"
-    map = "d"
+    map = " "
     fzf = dict(ansi=True)
     files_command = "ls --color=always --all"
 
@@ -610,8 +616,7 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     def handle(self, match):
         self.app.go(os.path.join(self.app.git, match))
 
-
-if __name__ == "__main__":
+def main():
     app = App()
     app.loadhist()
     @atexit.register
@@ -629,3 +634,11 @@ if __name__ == "__main__":
     except ValueError:
         app.go("~")
     app.main()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except Exception as exc:
+        import traceback
+        traceback.print_exc()
+        input('>')
