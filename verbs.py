@@ -125,7 +125,11 @@ class AppGUIMixin:
             self._main()
         except KeyboardInterrupt:
             print("^C", file=sys.stderr)
-            sys.exit(130)
+            self.close()
+
+    def close(self):
+        self.savehist()
+        self.run("nvr +FloatClose", shell=True)
 
 
 class App(AppGUIMixin):
@@ -136,11 +140,11 @@ class App(AppGUIMixin):
         self.dir = None
 
     def savehist(self):
-        Path('~/.verbs_hist').expanduser().write_text(json.dumps(self.hist))
+        Path('~/.verbs_hist').expanduser().write_text(json.dumps(list((self.hist))))
 
     def loadhist(self):
         try:
-            self.path = json.loads(Path('~/.verbs_hist').expanduser().read_text())
+            self.hist = json.loads(Path('~/.verbs_hist').expanduser().read_text())
         except FileNotFoundError:
             pass
 
@@ -150,7 +154,7 @@ class App(AppGUIMixin):
 
         path = os.path.expanduser(path)
 
-        if self.path and savehist:
+        if self.path and savehist and self.path != path:
             self.hist.append((self.path, self.line))
 
         if self.path and self.dir:
@@ -227,7 +231,7 @@ class Verb:
 
 class CommandVerb(Verb):
     anykey = False
-    quit = False
+    close = False
 
     @property
     def help(self):
@@ -253,8 +257,8 @@ class CommandVerb(Verb):
             shell=True,
             anykey=self.anykey,
         )
-        if self.quit:
-            self.app.run("nvr +FloatClose", shell=True)
+        if self.close:
+            self.app.close()
 
 
 class ParentDirVerb(ShowIfDirMixin, Verb):
@@ -263,41 +267,15 @@ class ParentDirVerb(ShowIfDirMixin, Verb):
 
     def __call__(self):
         if self.app.line:
-            self.app.go(app.path)
+            self.app.go(self.app.path)
         else:
             newpath = os.path.dirname(self.app.path)
             self.app.go(newpath)
 
 
-class ListProjectsVerb(Verb):
-    help = "Find projects"
-    map = "P"
-
-    def show(self):
-        return not ShowIfGitMixin.show(self) and ShowIfDirMixin.show(self)
-
-    def __call__(self):
-        match = self.app.output(
-            """find -name .git -maxdepth 4 2>/dev/null |
-                    xargs realpath | xargs dirname | fzf""",
-            shell=True,
-        )
-        self.app.go(match)
-
-
-class ListByrdProjectsVerb(Verb):
-    help = "Find byrd projects"
-    map = "y"
-
-    def __call__(self):
-        self.app.go("~/byrd")
-        pv = ListProjectsVerb(self.app)
-        pv()
-
-
 class BackVerb(Verb):
-    help = "Go back"
     map = "u"
+    help = "Go back"
 
     def show(self):
         return self.app.hist
@@ -312,7 +290,7 @@ class QuitVerb(Verb):
     map = "q"
 
     def __call__(self):
-        sys.exit(0)
+        self.app.close()
 
 
 class CdHomeVerb(Verb):
@@ -371,14 +349,21 @@ class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = " "
     command = "nvr +'wincmd p | e {path} | +{line}'"
     help = "Edit"
-    quit = True
+    close = True
 
 
 class RunTabVerb(CommandVerb):
     map = "c"
     command = "nvr +'wincmd p | tabnew'"
     help = "New tab"
-    quit = True
+    close = True
+
+
+class RunWriteVerb(CommandVerb):
+    map = "w"
+    command = "nvr +'wincmd p | write'"
+    help = "Write vim file"
+    close = True
 
 
 class RunVimVerb(ShowIfFileMixin, CommandVerb):
@@ -432,6 +417,10 @@ class FilterVerb(Verb):
         fzf = ["fzf"]
         fzf_opts = self.fzf.copy()
 
+        fzf_opts.update({
+            'expect': ' '
+            })
+
         if self.fill_query and self.app.query:
             fzf_opts["query"] = self.app.query
 
@@ -456,7 +445,8 @@ class FilterVerb(Verb):
         self.handle(out)
 
     def handle(self, match):
-        self.app.go(match)
+        select = match.split('\n')[-1]
+        self.app.go(select)
 
     command = None
 
@@ -481,6 +471,26 @@ def cmd(c, *mixins):
         command = c
 
     return Tmp
+
+
+class ListProjectsVerb(FilterVerb):
+    help = "Find projects"
+    map = "P"
+    command = 'find -name .git -maxdepth 4 2>/dev/null | xargs realpath | xargs dirname'
+    fill_query = False
+
+    def show(self):
+        return not ShowIfGitMixin.show(self) and ShowIfDirMixin.show(self)
+
+
+class ListByrdProjectsVerb(Verb):
+    help = "Find byrd projects"
+    map = "y"
+
+    def __call__(self):
+        self.app.go("~/byrd")
+        pv = ListProjectsVerb(self.app)
+        pv()
 
 
 class CommandsVerb(FilterVerb):
@@ -619,9 +629,6 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
 def main():
     app = App()
     app.loadhist()
-    @atexit.register
-    def onquit():
-        app.savehist()
     try:
         file, line, query = sys.argv[1:]
         try:
@@ -641,4 +648,7 @@ if __name__ == "__main__":
     except Exception as exc:
         import traceback
         traceback.print_exc()
-        input('>')
+        try:
+            input('>')
+        except Exception:
+            pass
