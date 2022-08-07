@@ -1,5 +1,4 @@
 import os
-import atexit
 import subprocess
 import sys
 import curses
@@ -26,6 +25,7 @@ class AppGUIMixin:
 
     arrow = 0
     query = None
+    nothing_pressed_yet = True
 
     def _draw(self, stdscr, verbs):
         # Clear screen
@@ -96,7 +96,14 @@ class AppGUIMixin:
                     verbs.append(verb_obj)
             verbs.sort(key=lambda v: v.help)
 
+            #
+            # HACK: Enable a shortcut but hitting spaces two times
+            #
             key = self.draw(verbs)
+            if key == ' ' and self.nothing_pressed_yet:
+                CdGitRootVerb(self)()
+                continue
+            self.nothing_pressed_yet = False
 
             if key in ("j", "KEY_DOWN"):
                 self.arrow = min(self.arrow + 1, len(verbs) - 1)
@@ -367,8 +374,8 @@ class RunWriteVerb(CommandVerb):
 
 
 class RunVimVerb(ShowIfFileMixin, CommandVerb):
-    map = "E"
-    command = "vim {path} +{line}"
+    map = "e"
+    command = "nvim {path} +{line}"
     help = "vim"
 
 
@@ -442,11 +449,14 @@ class FilterVerb(Verb):
             out = self.app.output(cmd, shell=True)
         else:
             out = self.app.output(cmd, shell=True, cwd=self.cwd)
-        self.handle(out)
+        self._handle(out)
+
+    def _handle(self, match):
+        select = match.split('\n')[-1]
+        self.handle(select)
 
     def handle(self, match):
-        select = match.split('\n')[-1]
-        self.app.go(select)
+        self.app.go(match)
 
     command = None
 
