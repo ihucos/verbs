@@ -413,6 +413,7 @@ class RunLastCommandVerb(CommandVerb):
 class FilterVerb(Verb):
 
     fill_query = True
+    space_return = True
     cwd = None
 
     fzf = {}
@@ -424,9 +425,10 @@ class FilterVerb(Verb):
         fzf = ["fzf"]
         fzf_opts = self.fzf.copy()
 
-        fzf_opts.update({
-            'expect': ' '
-            })
+        if self.space_return:
+            fzf_opts.update({
+                'expect': ' '
+                })
 
         if self.fill_query and self.app.query:
             fzf_opts["query"] = self.app.query
@@ -543,6 +545,7 @@ class CommandsVerb(FilterVerb):
 
 
 class FindLines(FilterVerb):
+    space_return = False
     help = "Filter lines"
     map = "/"
     fzf = dict(
@@ -556,7 +559,7 @@ class FindLines(FilterVerb):
         preview_window="bottom:10",
     )
 
-    command = "xargs -L1 grep --line-number --with-filename ."
+    command = "xargs -L1 grep --line-number --with-filename . 2> /dev/null"
 
     def handle(self, match):
         file, line, _ = match.split(":", 2)
@@ -623,9 +626,9 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     map = "r"
     help = "Filter recent"
     command = 'sort | uniq'
-    fzf = dict(preview="git diff develop {}")
+    fzf = dict(preview="git diff master {}")
     files_command = """ {
-		git diff --name-only $(git merge-base --fork-point develop)..HEAD .
+		git diff --name-only $(git merge-base --fork-point master)..HEAD .
 		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
 	}"""
 
