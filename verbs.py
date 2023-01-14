@@ -323,6 +323,16 @@ class CdVimVerb(Verb):
     def __call__(self):
         self.app.go(self._vimcwd)
 
+class Make(Verb):
+    map = "m"
+    anykey = True
+    close = True
+
+    help = "Run make"
+
+    def __call__(self):
+        self.app.go(self.app.git)
+        self.app.run("make | less", shell=True)
 
 class CdGitRootVerb(Verb):
     help = "Go project root"
