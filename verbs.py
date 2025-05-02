@@ -8,6 +8,13 @@ from curses import wrapper
 from pathlib import Path
 import json
 
+CATEGORY_ORDER = [
+    "file",
+    "filter",
+    "command",
+    "go",
+]
+
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
 def inheritors(klass):
@@ -62,7 +69,9 @@ class AppGUIMixin:
             grouped_verbs[verb.category].append(verb)
 
         index = 0
-        for category, verbs in grouped_verbs.items():
+        for category, verbs in sorted(
+            grouped_verbs.items(), key=lambda i: CATEGORY_ORDER.index(i[0])
+        ):
             stdscr.addstr(c, pad_left, category.capitalize())
             c += 1
             for verb in verbs:
@@ -70,7 +79,7 @@ class AppGUIMixin:
                     a = "*"
                 else:
                     a = " "
-                stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help}")
+                stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help.capitalize()}")
                 c += 1
 
                 index += 1
@@ -251,7 +260,7 @@ class CommandVerb(Verb):
 
     @property
     def help(self):
-        return f"Run `{self.command}`"
+        return f"`{self.command}`"
 
     def __call__(self):
         path = shlex.quote(self.app.path)
@@ -278,9 +287,9 @@ class CommandVerb(Verb):
 
 
 class ParentDirVerb(Verb):
-    help = "Go up"
+    help = "up"
     map = "u"
-    category = "navigation"
+    category = "go"
 
     def show(self):
         return self.app.path != "/"
@@ -295,8 +304,8 @@ class ParentDirVerb(Verb):
 
 class BackVerb(Verb):
     map = "U"
-    help = "Go back"
-    category = "navigation"
+    help = "back"
+    category = "go"
 
     def show(self):
         return self.app.hist
@@ -309,7 +318,7 @@ class BackVerb(Verb):
 class QuitVerb(Verb):
     help = "Quit"
     map = "q"
-    category = "global"
+    category = "go"
 
     def __call__(self):
         self.app.close()
@@ -317,8 +326,8 @@ class QuitVerb(Verb):
 
 class CdHomeVerb(Verb):
     map = "h"
-    help = "Go home"
-    category = "navigation"
+    help = "home"
+    category = "go"
 
     def show(self):
         return self.app.path != os.path.expanduser("~")
@@ -329,22 +338,22 @@ class CdHomeVerb(Verb):
 
 class CdVimVerb(Verb):
     map = "v"
-    category = "navigation"
+    category = "go"
 
     @property
     def _vimcwd(self):
         return self.app.output("nvr --remote-expr 'getcwd()'", shell=True)
 
-    help = "Go vim cwd"
+    help = "vim cwd"
 
     def __call__(self):
         self.app.go(self._vimcwd)
 
 
 class CdGitRootVerb(Verb):
-    help = "Go project root"
+    help = "project root"
     map = "p"
-    category = "navigation"
+    category = "go"
 
     def show(self):
         return self.app.git and not self.app.path == self.app.git
@@ -494,7 +503,7 @@ class ListProjectsVerb(FilterVerb):
 
 
 class ListHomeProjectsVerb(Verb):
-    help = "Find home projects"
+    help = "projects"
     map = "y"
     category = "filter"
 
@@ -508,7 +517,8 @@ class CommandsVerb(FilterVerb):
     fill_query = False
     anykey = True
     map = "a"
-    help = "Filter command"
+    help = "Filter commands"
+    category = "command"
     COMMANDS = [
         cmd("file {path}"),
         cmd("xdg-open {path}"),
@@ -544,7 +554,7 @@ class CommandsVerb(FilterVerb):
 
 class FindLines(FilterVerb):
     space_return = False
-    help = "Filter lines"
+    help = "lines"
     map = "/"
     fzf = dict(
         tac=True,
@@ -566,7 +576,7 @@ class FindLines(FilterVerb):
 
 class FilterFilesVerb(FilterVerb):
     fill_query = False
-    help = "Filter files"
+    help = "files"
     map = "f"
     fzf = dict(preview="cat -n {}")
 
@@ -581,7 +591,7 @@ class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
 
 class FilterVimBufferVerb(FilterVerb):
     fill_query = False
-    help = "Filter vim buffers"
+    help = "vim buffers"
     map = "b"
     fzf = dict(ansi=True)
     command = "grep -v '^term://'"
@@ -599,7 +609,7 @@ class FilterVimBufferVerb(FilterVerb):
 
 class FilterTagsVerb(FilterVerb):
     map = "t"
-    help = "Filter tags"
+    help = "tags"
     fzf = dict(
         exact=True,
         delimiter="\t",
@@ -622,11 +632,11 @@ class FilterTagsVerb(FilterVerb):
 class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     fill_query = False
     map = "r"
-    help = "Filter recent"
+    help = "changed files"
     command = "sort | uniq"
-    fzf = dict(preview="git diff master {}")
+    fzf = dict(preview="git diff main {}")
     files_command = """ {
-		git diff --name-only $(git merge-base --fork-point master)..HEAD .
+		git diff --name-only $(git merge-base --fork-point main)..HEAD .
 		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
 	}"""
 
