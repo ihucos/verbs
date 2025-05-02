@@ -66,8 +66,8 @@ class AppGUIMixin:
             stdscr.addstr(c, pad_left, "")
             c += 1
 
-            stdscr.addstr(c, pad_left, "Commands")
-            c += 1
+        stdscr.addstr(c, pad_left, "Commands")
+        c += 1
 
         for index, verb in enumerate(verbs):
             if index == self.arrow:
@@ -385,13 +385,6 @@ class RunTabVerb(CommandVerb):
     close = True
 
 
-class RunWriteVerb(CommandVerb):
-    map = "w"
-    command = "nvr +'wincmd p | write'"
-    help = "Write vim file"
-    close = True
-
-
 class RunVimVerb(ShowIfFileMixin, CommandVerb):
     map = "e"
     command = "nvim {path} +{line}"
@@ -594,7 +587,7 @@ class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
     help = "ls"
     map = " "
     fzf = dict(ansi=True)
-    files_command = "ls --color=always --all"
+    files_command = "ls --color=always -a"
 
 
 class FilterVimBufferVerb(FilterVerb):
