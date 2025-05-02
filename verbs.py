@@ -66,16 +66,27 @@ class AppGUIMixin:
             stdscr.addstr(c, pad_left, "")
             c += 1
 
-        stdscr.addstr(c, pad_left, "Commands")
-        c += 1
+        grouped_verbs = {}
+        for verb in verbs:
+            grouped_verbs.setdefault(verb.category, [])
+            grouped_verbs[verb.category].append(verb)
 
-        for index, verb in enumerate(verbs):
-            if index == self.arrow:
-                a = "*"
-            else:
-                a = " "
-            stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help}")
+        index = 0
+        for category, verbs in grouped_verbs.items():
+            stdscr.addstr(c, pad_left, category.capitalize())
             c += 1
+            for verb in verbs:
+                if index == self.arrow:
+                    a = "*"
+                else:
+                    a = " "
+                stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help}")
+                c += 1
+
+                index += 1
+
+            c += 1
+            stdscr.addstr(c, pad_left, "")
 
         curses.curs_set(0)
 
@@ -246,6 +257,7 @@ class Verb:
 class CommandVerb(Verb):
     anykey = False
     close = False
+    category = "command"
 
     @property
     def help(self):
@@ -278,6 +290,7 @@ class CommandVerb(Verb):
 class ParentDirVerb(ShowIfDirMixin, Verb):
     help = "Go up"
     map = "."
+    category = "navigation"
 
     def __call__(self):
         if self.app.line:
@@ -290,6 +303,7 @@ class ParentDirVerb(ShowIfDirMixin, Verb):
 class BackVerb(Verb):
     map = "u"
     help = "Go back"
+    category = "navigation"
 
     def show(self):
         return self.app.hist
@@ -302,6 +316,7 @@ class BackVerb(Verb):
 class QuitVerb(Verb):
     help = "Quit"
     map = "q"
+    category = "global"
 
     def __call__(self):
         self.app.close()
@@ -310,6 +325,7 @@ class QuitVerb(Verb):
 class CdHomeVerb(Verb):
     map = "h"
     help = "Go home"
+    category = "navigation"
 
     def show(self):
         return self.app.path != os.path.expanduser("~")
@@ -320,6 +336,7 @@ class CdHomeVerb(Verb):
 
 class CdVimVerb(Verb):
     map = "v"
+    category = "global"
 
     @property
     def _vimcwd(self):
@@ -331,21 +348,10 @@ class CdVimVerb(Verb):
         self.app.go(self._vimcwd)
 
 
-class Make(Verb):
-    map = "m"
-    anykey = True
-    close = True
-
-    help = "Run make"
-
-    def __call__(self):
-        self.app.go(self.app.git)
-        self.app.run("make | less", shell=True)
-
-
 class CdGitRootVerb(Verb):
     help = "Go project root"
     map = "p"
+    category = "navigation"
 
     def show(self):
         return self.app.git and not self.app.path == self.app.git
@@ -376,19 +382,7 @@ class RunEditVerb(ShowIfFileMixin, CommandVerb):
     command = "nvr +'wincmd p | e {path} | {line}'"
     help = "Edit"
     close = True
-
-
-class RunTabVerb(CommandVerb):
-    map = "c"
-    command = "nvr +'wincmd p | tabnew'"
-    help = "New tab"
-    close = True
-
-
-class RunVimVerb(ShowIfFileMixin, CommandVerb):
-    map = "e"
-    command = "nvim {path} +{line}"
-    help = "vim"
+    category = "file"
 
 
 class RunBlackVerb(CommandVerb):
@@ -426,6 +420,7 @@ class FilterVerb(Verb):
     fill_query = True
     space_return = True
     cwd = None
+    category = "filter"
 
     fzf = {}
 
@@ -508,6 +503,7 @@ class ListProjectsVerb(FilterVerb):
 class ListHomeProjectsVerb(Verb):
     help = "Find home projects"
     map = "y"
+    category = "filter"
 
     def __call__(self):
         self.app.go("~")
