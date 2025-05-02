@@ -373,7 +373,7 @@ class RunBashVerb(ShowIfDirMixin, CommandVerb):
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
     map = " "
-    command = "nvr +'wincmd p | e {path} | +{line}'"
+    command = "nvr +'wincmd p | e {path} | {line}'"
     help = "Edit"
     close = True
 
