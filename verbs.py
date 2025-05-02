@@ -47,24 +47,14 @@ class AppGUIMixin:
 
         c = pad_top
 
-        stdscr.addstr(c, 1, "Scope")
-        c += 1
-
-        stdscr.addstr(c, 1, "  " + self.path_repr() + " ")
-        c += 1
-
-        stdscr.addstr(c, pad_left, "")
-        c += 1
-
         if self.query:
-            stdscr.addstr(c, 1, "Query")
-            c += 1
+            query = f" - {self.query}"
+        else:
+            query = ""
+        stdscr.addstr(c, 1, self.path_repr() + query)
+        c += 1
 
-            stdscr.addstr(c, 1, "  " + self.query + " ")
-            c += 1
-
-            stdscr.addstr(c, pad_left, "")
-            c += 1
+        c += 1
 
         grouped_verbs = {}
         for verb in verbs:
@@ -238,8 +228,8 @@ class ShowIfFileMixin:
 
 class ShowIfDirMixin:
     def show(self):
-        return True
-        # return os.path.isdir(self.app.path)
+        # return True
+        return os.path.isdir(self.app.path)
 
 
 class Verb:
@@ -287,10 +277,13 @@ class CommandVerb(Verb):
             self.app.close()
 
 
-class ParentDirVerb(ShowIfDirMixin, Verb):
+class ParentDirVerb(Verb):
     help = "Go up"
-    map = "."
+    map = "u"
     category = "navigation"
+
+    def show(self):
+        return self.app.path != "/"
 
     def __call__(self):
         if self.app.line:
@@ -301,7 +294,7 @@ class ParentDirVerb(ShowIfDirMixin, Verb):
 
 
 class BackVerb(Verb):
-    map = "u"
+    map = "U"
     help = "Go back"
     category = "navigation"
 
@@ -336,7 +329,7 @@ class CdHomeVerb(Verb):
 
 class CdVimVerb(Verb):
     map = "v"
-    category = "global"
+    category = "navigation"
 
     @property
     def _vimcwd(self):
