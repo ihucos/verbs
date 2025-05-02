@@ -7,7 +7,6 @@ from time import sleep
 from curses import wrapper
 from pathlib import Path
 import json
-import shlex
 
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
@@ -28,6 +27,7 @@ def nix(run):
         "nix-shell",
         "--packages",
         "findutils",
+        "universal-ctags",
         "--run",
         run,
     ])
@@ -623,11 +623,11 @@ class FilterTagsVerb(FilterVerb):
         delimiter="\t",
         with_nth=1,
         nth=1,
-        preview='a={3}; printf {2}"\n"; cat -n {2} | tail --quiet -n +${a::-2}',
+        preview='line="$(printf {3} | rev | cut -c3- | rev)"; printf {2}"\n"; cat -n {2} | tail --quiet -n +"$line"',
         preview_window="right:70%",
     )
 
-    command = "xargs ctags --excmd=number -f - "
+    command = nix("xargs ctags --excmd=number -f - ")
 
     def handle(self, match):
         i = match.split("\t")
