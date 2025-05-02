@@ -72,14 +72,16 @@ class AppGUIMixin:
         for category, verbs in sorted(
             grouped_verbs.items(), key=lambda i: CATEGORY_ORDER.index(i[0])
         ):
-            stdscr.addstr(c, pad_left, category.capitalize())
+            stdscr.addstr(c, pad_left, category.upper())
             c += 1
             for verb in verbs:
                 if index == self.arrow:
                     a = "*"
                 else:
                     a = " "
-                stdscr.addstr(c, pad_left, f"{a} {verb.map} - {verb.help.capitalize()}")
+                stdscr.addstr(
+                    c, pad_left, f"{a} [{verb.map}]  {verb.help.capitalize()}"
+                )
                 c += 1
 
                 index += 1
