@@ -7,6 +7,8 @@ from time import sleep
 from curses import wrapper
 from pathlib import Path
 import json
+import shlex
+
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
 def inheritors(klass):
@@ -21,8 +23,17 @@ def inheritors(klass):
     return subclasses
 
 
-class AppGUIMixin:
+def nix(run):
+    return shlex.join([
+        "nix-shell",
+        "--packages",
+        "findutils",
+        "--run",
+        run,
+    ])
 
+
+class AppGUIMixin:
     arrow = 0
     query = None
     nothing_pressed_yet = True
@@ -87,7 +98,6 @@ class AppGUIMixin:
 
     def _main(self):
         while True:
-
             verbs = []
             for verb in inheritors(Verb):
                 verb_obj = verb(self)
@@ -100,7 +110,7 @@ class AppGUIMixin:
             # HACK: Enable a shortcut but hitting spaces two times
             #
             key = self.draw(verbs)
-            if key == ' ' and self.nothing_pressed_yet:
+            if key == " " and self.nothing_pressed_yet:
                 CdGitRootVerb(self)()
                 continue
             self.nothing_pressed_yet = False
@@ -147,16 +157,15 @@ class App(AppGUIMixin):
         self.dir = None
 
     def savehist(self):
-        Path('~/.verbs_hist').expanduser().write_text(json.dumps(list((self.hist))))
+        Path("~/.verbs_hist").expanduser().write_text(json.dumps(list((self.hist))))
 
     def loadhist(self):
         try:
-            self.hist = json.loads(Path('~/.verbs_hist').expanduser().read_text())
+            self.hist = json.loads(Path("~/.verbs_hist").expanduser().read_text())
         except FileNotFoundError:
             pass
 
     def go(self, path, line=None, savehist=True):
-
         self.line = line
 
         path = os.path.expanduser(path)
@@ -188,13 +197,11 @@ class App(AppGUIMixin):
         kwargs.setdefault("cwd", self.dir)
         subprocess.Popen(*args, **kwargs).wait()
         if anykey:
-            self.run(
-                [
-                    "/bin/bash",
-                    "-c",
-                    "read -rsp $'Press any key to continue...\n' -n1 key",
-                ]
-            )
+            self.run([
+                "/bin/bash",
+                "-c",
+                "read -rsp $'Press any key to continue...\n' -n1 key",
+            ])
 
     def outputgo(self, *args, **kwargs):
         kwargs.setdefault("cwd", self.dir)
@@ -323,6 +330,7 @@ class CdVimVerb(Verb):
     def __call__(self):
         self.app.go(self._vimcwd)
 
+
 class Make(Verb):
     map = "m"
     anykey = True
@@ -333,6 +341,7 @@ class Make(Verb):
     def __call__(self):
         self.app.go(self.app.git)
         self.app.run("make | less", shell=True)
+
 
 class CdGitRootVerb(Verb):
     help = "Go project root"
@@ -421,7 +430,6 @@ class RunLastCommandVerb(CommandVerb):
 
 
 class FilterVerb(Verb):
-
     fill_query = True
     space_return = True
     cwd = None
@@ -436,9 +444,7 @@ class FilterVerb(Verb):
         fzf_opts = self.fzf.copy()
 
         if self.space_return:
-            fzf_opts.update({
-                'expect': ' '
-                })
+            fzf_opts.update({"expect": " "})
 
         if self.fill_query and self.app.query:
             fzf_opts["query"] = self.app.query
@@ -454,7 +460,6 @@ class FilterVerb(Verb):
         if self.command:
             cmd = f"{self.files_command} | {self.command} | {fzf_cmd}"
         else:
-
             cmd = f"{self.files_command} | {fzf_cmd}"
 
         if self.cwd is None:
@@ -464,7 +469,7 @@ class FilterVerb(Verb):
         self._handle(out)
 
     def _handle(self, match):
-        select = match.split('\n')[-1]
+        select = match.split("\n")[-1]
         self.handle(select)
 
     def handle(self, match):
@@ -481,7 +486,7 @@ class FilterVerb(Verb):
             return "git ls-files"
 
         if self.app.path == self.app.dir:
-            return "find . -type f 2>/dev/null"
+            return nix("find . -type f 2>/dev/null")
 
 
 def cmd(c, *mixins):
@@ -498,25 +503,26 @@ def cmd(c, *mixins):
 class ListProjectsVerb(FilterVerb):
     help = "Find projects"
     map = "P"
-    command = 'find -name .git -maxdepth 4 2>/dev/null | xargs realpath | xargs dirname'
+    command = nix(
+        "find -name .git -maxdepth 4 2>/dev/null | xargs realpath | xargs dirname"
+    )
     fill_query = False
 
     def show(self):
         return not ShowIfGitMixin.show(self) and ShowIfDirMixin.show(self)
 
 
-class ListByrdProjectsVerb(Verb):
-    help = "Find byrd projects"
+class ListHomeProjectsVerb(Verb):
+    help = "Find home projects"
     map = "y"
 
     def __call__(self):
-        self.app.go("~/byrd")
+        self.app.go("~")
         pv = ListProjectsVerb(self.app)
         pv()
 
 
 class CommandsVerb(FilterVerb):
-
     fill_query = False
     anykey = True
     map = "a"
@@ -635,7 +641,7 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     fill_query = False
     map = "r"
     help = "Filter recent"
-    command = 'sort | uniq'
+    command = "sort | uniq"
     fzf = dict(preview="git diff master {}")
     files_command = """ {
 		git diff --name-only $(git merge-base --fork-point master)..HEAD .
@@ -648,6 +654,7 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
 
     def handle(self, match):
         self.app.go(os.path.join(self.app.git, match))
+
 
 def main():
     app = App()
@@ -665,13 +672,15 @@ def main():
         app.go("~")
     app.main()
 
+
 if __name__ == "__main__":
     try:
         main()
     except Exception as exc:
         import traceback
+
         traceback.print_exc()
         try:
-            input('>')
+            input(">")
         except Exception:
             pass
