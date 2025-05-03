@@ -379,8 +379,8 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
 
 class RunSCommit(CommandVerb):
     map = "c"
-    command = "s-commit"
-    help = "Commit staged changes with AI"
+    command = "s-commit && git push"
+    help = "Commit staged changes with AI and push"
     category = "ai"
 
 
