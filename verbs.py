@@ -13,6 +13,7 @@ CATEGORY_ORDER = [
     "filter",
     "command",
     "go",
+    "ai",
 ]
 
 
@@ -374,6 +375,13 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "o"
     command = "less -N +{line} {path}"
     help = "Pager"
+
+
+class RunSCommit(CommandVerb):
+    map = "c"
+    command = "s-commit"
+    help = "Commit staged changes with AI"
+    category = "ai"
 
 
 class RunBashVerb(ShowIfDirMixin, CommandVerb):
