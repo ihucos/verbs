@@ -74,7 +74,7 @@ class AppGUIMixin:
         ):
             stdscr.addstr(c, pad_left, category.upper())
             c += 1
-            for verb in verbs:
+            for verb in sorted(verbs, key=lambda i: i.help):
                 if index == self.arrow:
                     a = "*"
                 else:
@@ -124,6 +124,7 @@ class AppGUIMixin:
             key = self.draw(verbs)
             if key == " " and self.nothing_pressed_yet:
                 CdGitRootVerb(self)()
+                self.nothing_pressed_yet = False
                 continue
             self.nothing_pressed_yet = False
 
@@ -389,20 +390,14 @@ class RunEditVerb(ShowIfFileMixin, CommandVerb):
     category = "file"
 
 
-class RunBlackVerb(CommandVerb):
-    map = "B"
-    anykey = True
+# class RunBlackVerb(CommandVerb):
+#     map = "B"
+#     anykey = True
 
-    def show(self):
-        return ShowIfFileMixin.show(self) and self.app.path.endswith(".py")
+#     def show(self):
+#         return ShowIfFileMixin.show(self) and self.app.path.endswith(".py")
 
-    command = "black {path}"
-
-
-class RunTestVerb(CommandVerb):
-    map = "T"
-    anykey = True
-    command = "sh -cx hans\ test\ {pdir}\ {relpath}\ -vv"
+#     command = "black {path}"
 
 
 class SetVimVerb(ShowIfDirMixin, CommandVerb):
@@ -417,7 +412,13 @@ class RunLastCommandVerb(CommandVerb):
 
     @property
     def command(self):
-        return self.app.output("cat ~/.bash_eternal_history  | tail -n 1", shell=True)
+        return self.app.output(
+            "cat ~/.bash_eternal_history  | tail -n 1", shell=True
+        ).strip()
+
+    @property
+    def help(self):
+        return f"Last (`{self.command}`)"
 
 
 class FilterVerb(Verb):
@@ -504,56 +505,6 @@ class ListProjectsVerb(FilterVerb):
         return not ShowIfGitMixin.show(self) and ShowIfDirMixin.show(self)
 
 
-class ListHomeProjectsVerb(Verb):
-    help = "projects"
-    map = "y"
-    category = "filter"
-
-    def __call__(self):
-        self.app.go("~")
-        pv = ListProjectsVerb(self.app)
-        pv()
-
-
-class CommandsVerb(FilterVerb):
-    fill_query = False
-    anykey = True
-    map = "a"
-    help = "Filter commands"
-    category = "command"
-    COMMANDS = [
-        cmd("file {path}"),
-        cmd("xdg-open {path}"),
-        cmd("bash -lc startvpn"),
-        cmd("hans run {pdir} ./manage konch"),
-        cmd("heroku run ./manage konch --app byrd-{pdir}-staging", ShowIfGitMixin),
-    ]
-
-    @property
-    def files_command(self):
-        echos = []
-        for c in self.COMMANDS:
-            cobj = c(self.app)
-            if cobj.show():
-                echos.append("echo {}".format(shlex.quote(cobj.command)))
-        echos.sort()
-        return "\n".join(["{"] + echos + ["}"])
-
-    def handle(self, match):
-        path = shlex.quote(self.app.path)
-        dir = shlex.quote(self.app.dir)
-        if self.app.git:
-            pdir = shlex.quote(os.path.basename(self.app.git))
-        else:
-            pdir = ""
-        line = shlex.quote(self.app.line or "0")
-        self.app.run(
-            match.format(path=path, line=line, dir=dir, pdir=pdir),
-            shell=True,
-            anykey=self.anykey,
-        )
-
-
 class FindLines(FilterVerb):
     space_return = False
     help = "lines"
@@ -579,16 +530,16 @@ class FindLines(FilterVerb):
 class FilterFilesVerb(FilterVerb):
     fill_query = False
     help = "files"
-    map = "f"
+    map = " "
     fzf = dict(preview="cat -n {}")
 
 
-class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
-    fill_query = False
-    help = "ls"
-    map = " "
-    fzf = dict(ansi=True)
-    files_command = "ls --color=always -a"
+# class FilterDirsVerb(ShowIfDirMixin, FilterVerb):
+#     fill_query = False
+#     help = "ls"
+#     map = "l"
+#     fzf = dict(ansi=True)
+#     files_command = "ls --color=always -a"
 
 
 class FilterVimBufferVerb(FilterVerb):
