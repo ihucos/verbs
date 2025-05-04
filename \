@@ -26,10 +26,6 @@ def background():
     )
 
 
-def bat():
-    return f"bat --number --theme 'Solarized ({background()})' --color always"
-
-
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
 def inheritors(klass):
     subclasses = set()
@@ -388,7 +384,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "o"
-    command = bat() + " --paging=always -r {line}: {path}"
+    command = "less -N +{line} {path}"
     help = "Pager"
     close = False
 
@@ -465,7 +461,8 @@ class FilterVerb(Verb):
     category = "filter"
 
     fzf = {
-        "color": f"{background()},bg+:{'#073642' if background() == 'dark' else '#eee8d5'}",
+        "color": background(),
+        "preview-window": "noborder",
     }
 
     def parse(self, stri):
@@ -561,9 +558,8 @@ class FindLines(FilterVerb):
         delimiter=":",
         nth="3..",
         no_sort=True,
-        preview=bat() + " {1} | tail --lines=+{2}",
+        preview="cat {1} --number | tail --lines=+{2}",
         preview_window="bottom:10",
-        **FilterVerb.fzf,
     )
 
     command = "xargs -L1 grep --line-number --with-filename . 2> /dev/null"
@@ -583,8 +579,7 @@ class FilterFilesVerb(FilterVerb):
         return dict(
             super().fzf,
             **{
-                "preview": f"{bat()} {{}}",
-                "preview-window": "noborder",
+                "preview": f"bat --plain --theme 'Solarized ({background()})' --color always {{}}",
             },
         )
 
@@ -623,11 +618,8 @@ class FilterTagsVerb(FilterVerb):
         delimiter="\t",
         with_nth=1,
         nth=1,
-        preview='line="$(printf {3} | rev | cut -c3- | rev)"; printf {2}"\n"; '
-        + bat()
-        + ' {2} | tail --quiet -n +"$line"',
+        preview='line="$(printf {3} | rev | cut -c3- | rev)"; printf {2}"\n"; cat -n {2} | tail --quiet -n +"$line"',
         preview_window="right:70%",
-        **FilterVerb.fzf,
     )
 
     command = nix("xargs ctags --excmd=number -f - ")
@@ -645,7 +637,7 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     map = "r"
     help = "changed files"
     command = "sort | uniq"
-    fzf = dict(preview="git diff main {} | " + bat(), **FilterVerb.fzf)
+    fzf = dict(preview="git diff main {}")
     files_command = """ {
 		git diff --name-only $(git merge-base --fork-point main)..HEAD .
 		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
