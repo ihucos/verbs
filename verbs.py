@@ -7,6 +7,7 @@ from time import sleep
 from curses import wrapper
 from pathlib import Path
 import json
+from functools import lru_cache
 
 CATEGORY_ORDER = [
     "file",
@@ -17,8 +18,8 @@ CATEGORY_ORDER = [
 ]
 
 
+@lru_cache()
 def background():
-    # cache?
     return (
         subprocess.check_output(["nvr", "--remote-expr", "&background"])
         .decode()
