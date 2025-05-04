@@ -379,7 +379,13 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
 
 class RunSCommit(CommandVerb):
     map = "c"
-    command = "lazygit status && s-commit && reset && git push"
+    command = """
+        set -ex;
+        lazygit status # User can add files here
+        echo 'Generating commit'
+        s-commit
+        reset
+        git push"""
     help = "Commit staged changes with AI and push"
     category = "ai"
     anykey = True
