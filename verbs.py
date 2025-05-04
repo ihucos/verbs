@@ -395,10 +395,15 @@ class RunSCommit(CommandVerb):
     anykey = True
 
 
-class RunBashVerb(ShowIfDirMixin, CommandVerb):
+class RunBashVerb(CommandVerb):
     map = "s"
     command = "bash"
     # help = 'Open shell here'
+
+
+class RunBashVerb(ShowIfGitMixin, CommandVerb):
+    map = "d"
+    command = "git diff"
 
 
 class RunEditVerb(ShowIfFileMixin, CommandVerb):
@@ -491,6 +496,12 @@ class FilterVerb(Verb):
 
     @property
     def files_command(self):
+        if os.path.isfile(self.app.path):
+            if self.app.git:
+                return "git ls-files"
+            else:
+                return "ls"
+
         if self.app.dir != self.app.path:
             return "echo {}".format(shlex.quote(self.app.path))
 
@@ -549,7 +560,7 @@ class FindLines(FilterVerb):
 class FilterFilesVerb(FilterVerb):
     fill_query = False
     help = "files"
-    map = " "
+    map = "f"
     fzf = dict(preview="cat -n {}")
 
 
