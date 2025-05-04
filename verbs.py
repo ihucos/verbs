@@ -648,7 +648,11 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     map = "r"
     help = "changed files"
     command = "sort | uniq"
-    fzf = dict(preview="git diff main {} | " + bat(), **FilterVerb.fzf)
+    fzf = dict(
+        preview="git diff main {} | " + bat(),
+        preview_window="noborder",
+        **FilterVerb.fzf,
+    )
     files_command = """ {
 		git diff --name-only $(git merge-base --fork-point main)..HEAD .
 		git status -s --porcelain | xargs -L1 | cut -d' ' -f2
