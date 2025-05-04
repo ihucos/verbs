@@ -385,7 +385,7 @@ class RunSCommit(CommandVerb):
     command = """
         set -e;
         lazygit status # User can add files here
-        echo 'Generating commit'
+        echo 'Generating commit...'
         s-commit
         reset
         set -x
