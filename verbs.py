@@ -27,8 +27,11 @@ def background():
     )
 
 
-def bat():
-    return f"bat --plain --theme 'Solarized ({background()})' --color always"
+def bat(middle="", lines=True):
+    cmd = f"bat --plain --theme 'Solarized ({background()})' --color always {middle}"
+    if lines:
+        cmd += " | cat -n "
+    return cmd
 
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
@@ -389,7 +392,7 @@ class RunLazygitVerb(ShowIfGitMixin, CommandVerb):
 
 class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "o"
-    command = bat() + " --paging=always -r {line}: {path}"
+    command = bat(lines=False) + " -r {line}: {path} | cat -n | less"
     help = "Pager"
     close = False
 
@@ -564,7 +567,7 @@ class FindLines(FilterVerb):
         delimiter=":",
         nth="3..",
         no_sort=True,
-        preview=bat() + " {1} | tail --lines=+{2}",
+        preview=bat("{1} | tail --lines=+{2}", lines=False),
         preview_window="bottom:10",
         **FilterVerb.fzf,
     )
@@ -586,7 +589,7 @@ class FilterFilesVerb(FilterVerb):
         return dict(
             super().fzf,
             **{
-                "preview": f"{bat()} {{}}",
+                "preview": bat("{}"),
                 "preview-window": "noborder",
             },
         )
@@ -627,8 +630,7 @@ class FilterTagsVerb(FilterVerb):
         with_nth=1,
         nth=1,
         preview='line="$(printf {3} | rev | cut -c3- | rev)"; printf {2}"\n"; '
-        + bat()
-        + ' {2} | tail --quiet -n +"$line"',
+        + bat(' {2} | tail --quiet -n +"$line"', lines=False),
         preview_window="right:70%:noborder",
         **FilterVerb.fzf,
     )
@@ -649,7 +651,7 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
     help = "changed files"
     command = "sort | uniq"
     fzf = dict(
-        preview="git diff main {} | " + bat(),
+        preview="git diff main {} | " + bat(lines=False),
         preview_window="noborder",
         **FilterVerb.fzf,
     )
