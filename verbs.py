@@ -28,7 +28,7 @@ def background():
 
 
 def bat():
-    return f"bat --number --theme 'Solarized ({background()})' --color always"
+    return f"bat --plain --theme 'Solarized ({background()})' --color always"
 
 
 # https://stackoverflow.com/questions/5881873/python-find-all-classes-which-inherit-from-this-one
@@ -467,6 +467,8 @@ class FilterVerb(Verb):
 
     fzf = {
         "color": f"{background()},bg+:{'#073642' if background() == 'dark' else '#eee8d5'}",
+        "no-separator": True,
+        "no-scrollbar": True,
     }
 
     def parse(self, stri):
@@ -627,7 +629,7 @@ class FilterTagsVerb(FilterVerb):
         preview='line="$(printf {3} | rev | cut -c3- | rev)"; printf {2}"\n"; '
         + bat()
         + ' {2} | tail --quiet -n +"$line"',
-        preview_window="right:70%",
+        preview_window="right:70%:noborder",
         **FilterVerb.fzf,
     )
 
