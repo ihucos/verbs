@@ -261,6 +261,7 @@ class CommandVerb(Verb):
     anykey = False
     close = False
     category = "command"
+    close = True
 
     @property
     def help(self):
