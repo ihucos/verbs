@@ -415,7 +415,7 @@ class RunBashVerb(CommandVerb):
     # help = 'Open shell here'
 
 
-class RunBashVerb(ShowIfGitMixin, CommandVerb):
+class RunGitDiffVerb(ShowIfGitMixin, CommandVerb):
     map = "d"
     command = "git diff"
 
