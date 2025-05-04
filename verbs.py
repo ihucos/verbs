@@ -379,7 +379,7 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
 
 class RunSCommit(CommandVerb):
     map = "c"
-    command = "lazygit status && s-commit && git push"
+    command = "lazygit status && s-commit && reset && git push"
     help = "Commit staged changes with AI and push"
     category = "ai"
     anykey = True
