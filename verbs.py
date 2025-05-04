@@ -78,6 +78,7 @@ class AppGUIMixin:
             for verb in sorted(verbs, key=lambda i: i.help):
                 if index == self.arrow:
                     a = "*"
+                    self.arrow_at = verb
                 else:
                     a = " "
                 stdscr.addstr(
@@ -134,7 +135,7 @@ class AppGUIMixin:
             elif key in ("k", "KEY_UP"):
                 self.arrow = max(self.arrow - 1, 0)
             elif key == "\n":
-                verb = list(verbs)[self.arrow]
+                verb = self.arrow_at
                 try:
                     verb()
                 except subprocess.CalledProcessError as exc:
