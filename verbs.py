@@ -389,6 +389,7 @@ class RunSCommit(CommandVerb):
         git push"""
     help = "Commit staged changes with AI and push"
     category = "ai"
+    anykey = True
 
 
 class RunBashVerb(ShowIfDirMixin, CommandVerb):
