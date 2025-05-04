@@ -376,6 +376,7 @@ class RunLessVerb(ShowIfFileMixin, CommandVerb):
     map = "o"
     command = "less -N +{line} {path}"
     help = "Pager"
+    close = False
 
 
 class RunSCommit(CommandVerb):
