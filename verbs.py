@@ -390,7 +390,7 @@ class RunSCommit(CommandVerb):
         reset
         set -x
         git push"""
-    help = "Commit staged changes with AI and push"
+    help = "Commit"
     category = "ai"
     anykey = True
 
