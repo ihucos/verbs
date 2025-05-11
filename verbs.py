@@ -673,6 +673,43 @@ class FilterRecentVerb(FilterVerb, ShowIfGitMixin):
         self.app.go(os.path.join(self.app.git, match))
 
 
+class PromptVerb(Verb):
+    map = "P"
+    help = "Prompt selection"
+    category = "ai"
+
+    def show(self):
+        return self.app.range
+
+    def __call__(self):
+        user_prompt = input("prompt> ")
+        from litellm import completion
+
+        with open(self.app.path) as file:
+            lines = file.readlines()[self.app.range[0] - 1 : self.app.range[1]]
+        selection = "\n".join(lines)
+        response = completion(
+            model="ollama/qwen3:8b",
+            messages=[
+                {
+                    "content": user_prompt + selection + "\nno_think",
+                    "role": "user",
+                },
+            ],
+            stream=True,
+        )
+
+        # Add comments
+        for part in response:
+            chunk = part.choices[0].delta.content or ""
+            sys.stdout.write(chunk)
+            sys.stdout.flush()
+
+        from time import sleep
+
+        sleep(100000)
+
+
 def main():
     app = App()
     app.loadhist()
