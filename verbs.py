@@ -197,8 +197,11 @@ class App(AppGUIMixin):
         except FileNotFoundError:
             pass
 
-    def go(self, path, line=None, savehist=True):
+    def go(self, path, line=None, savehist=True, range=None):
+        if line is not None and range is not None:
+            raise TypeError("Specify line or range")
         self.line = line
+        self.range = range
 
         path = os.path.expanduser(path)
 
@@ -241,10 +244,12 @@ class App(AppGUIMixin):
         self.go(path)
 
     def path_repr(self):
-        if self.line is None:
-            return self.path
-        else:
+        if self.line is not None:
             return f"{self.path} line {self.line}"
+        elif self.range is not None:
+            return f"{self.path} lines {self.range[0]}-{self.range[1]}"
+        else:
+            return self.path
 
 
 class ShowIfGitMixin:
@@ -318,7 +323,7 @@ class ParentDirVerb(Verb):
         return self.app.path != "/"
 
     def __call__(self):
-        if self.app.line:
+        if self.app.line or self.app.range:
             self.app.go(self.app.path)
         else:
             newpath = os.path.dirname(self.app.path)
@@ -403,7 +408,7 @@ class RunSCommit(CommandVerb):
         set -e;
         lazygit status # User can add files here
         echo 'Generating commit...'
-        s-commit
+        ai-commit
         reset
         set -x
         git push"""
@@ -674,7 +679,14 @@ def main():
     try:
         file, line, query = sys.argv[1:]
         try:
-            app.go(file, line)
+            if "," in line:
+                range = line.split(",")
+                app.go(
+                    file,
+                    range=list(sorted(int(i) for i in range)),
+                )
+            else:
+                app.go(file, line)
         except FileNotFoundError:
             app.go("~")
             cwd = app.output("nvr --remote-expr 'getcwd()'", shell=True)
