@@ -8,6 +8,7 @@ from curses import wrapper
 from pathlib import Path
 import json
 from functools import lru_cache
+import textwrap
 
 CATEGORY_ORDER = [
     "file",
@@ -678,36 +679,186 @@ class PromptVerb(Verb):
     help = "Prompt selection"
     category = "ai"
 
+    prompt_template = textwrap.dedent("""
+        {{user_prompt}}
+
+        {% if selection and include_selection %}
+        Selected code:
+        ```
+        {{selection}}
+        ```
+        {% endif %}
+
+        {% if include_open_file %}
+        # {}{open_file}}
+        ```
+        {{open_file|cat}}
+        ```
+        {% endif %}
+
+        {% for file in project_files %}
+        # {{file}}
+        ```
+        {{file|cat}}
+        ```
+        {% endfor %}
+
+        {% if dont_think %}
+        /no_think
+        {% endif %}
+        """).strip("\n ")
+
     def show(self):
-        return self.app.range
+        # return self.app.range
+        return True
 
-    def __call__(self):
-        user_prompt = input("prompt> ")
+    def cat(self, file):
+        with open(file) as f:
+            return f.read()
+
+    def submit(
+        self,
+        model,
+        temperature,
+        top_p,
+        include_selection,
+        include_open_file,
+        dont_think,
+        project_files,
+        user_prompt,
+        echo_generated_prompt,
+    ):
         from litellm import completion
+        import jinja2
+        import gradio as gr
 
-        with open(self.app.path) as file:
-            lines = file.readlines()[self.app.range[0] - 1 : self.app.range[1]]
-        selection = "\n".join(lines)
-        response = completion(
-            model="ollama/qwen3:8b",
-            messages=[
-                {
-                    "content": user_prompt + selection + "\nno_think",
-                    "role": "user",
-                },
-            ],
-            stream=True,
+        if self.app.range:
+            with open(self.app.path) as file:
+                lines = file.readlines()[self.app.range[0] - 1 : self.app.range[1]]
+            selection = "\n".join(lines)
+        else:
+            selection = ""
+
+        env = jinja2.Environment()
+        env.filters["cat"] = self.cat
+        template = env.from_string(self.prompt_template)
+        prompt = template.render(
+            open_file=self.app.path,
+            **{k: v for (k, v) in locals().items() if k != "self"},
         )
 
-        # Add comments
-        for part in response:
-            chunk = part.choices[0].delta.content or ""
-            sys.stdout.write(chunk)
-            sys.stdout.flush()
+        if echo_generated_prompt:
+            yield (gr.Textbox(value=prompt), gr.Button(value="Apply", size="sm"))
 
-        from time import sleep
+        else:
+            response = completion(
+                model=model,
+                temperature=temperature,
+                top_p=top_p,
+                messages=[
+                    {
+                        "content": prompt,
+                        "role": "user",
+                    },
+                ],
+                stream=True,
+            )
 
-        sleep(100000)
+            resp = ""
+            for part in response:
+                chunk = part.choices[0].delta.content or ""
+                resp += chunk
+                # yield resp
+
+                yield (
+                    gr.Textbox(value=resp),
+                    gr.Button(value="Apply", size="sm"),
+                )
+
+    def __call__(self):
+        import gradio as gr
+
+        project_files = (
+            subprocess.check_output(["git", "ls-files"]).decode().splitlines()
+        )
+
+        interface = gr.Interface(
+            self.submit,
+            [
+                gr.Radio(
+                    [
+                        "ollama/qwen3:0.6b",
+                        "ollama/qwen3:1.7b",
+                        "ollama/qwen3:4b",
+                        "ollama/qwen3:8b",
+                        "ollama/qwen3:14b",
+                    ],
+                    value="ollama/qwen3:4b",
+                    label="model",
+                ),
+                gr.Slider(
+                    0, 4, value=0.8, label="Temperature", info="How creative it is"
+                ),
+                gr.Slider(
+                    0,
+                    0.9,
+                    value=0.8,
+                    label="Top p",
+                    info="Higher value for more diverse text.",
+                ),
+                gr.Checkbox(label="Include selection"),
+                gr.Checkbox(label=f"Include `{self.app.path}`"),
+                gr.Checkbox(label="Don't think (for qwen)", value=True),
+                gr.Dropdown(
+                    project_files,
+                    value=[],
+                    multiselect=True,
+                    label="Files",
+                    info="Which git files to include in prompt",
+                ),
+                gr.TextArea(label="Prompt", info="The user prompt."),
+                gr.Checkbox(label="Echo generated prompt (debugging)"),
+            ],
+            [gr.Textbox(), gr.Button()],
+            allow_flagging="auto",
+        )
+        # subprocess.Popen([
+        #     "open",
+        #     "-na",
+        #     "Google Chrome",
+        #     "--args",
+        #     "--app=http://localhost:1235",
+        # ])
+        # interface.launch(server_port=1235)
+        interface.launch(inbrowser=True)
+
+
+# user_prompt = input("prompt> ")
+# from litellm import completion
+
+# with open(self.app.path) as file:
+#     lines = file.readlines()[self.app.range[0] - 1 : self.app.range[1]]
+# selection = "\n".join(lines)
+# response = completion(
+#     model="ollama/qwen3:8b",
+#     messages=[
+#         {
+#             "content": user_prompt + selection + "\nno_think",
+#             "role": "user",
+#         },
+#     ],
+#     stream=True,
+# )
+
+# # Add comments
+# for part in response:
+#     chunk = part.choices[0].delta.content or ""
+#     sys.stdout.write(chunk)
+#     sys.stdout.flush()
+
+# from time import sleep
+
+# sleep(100000)
 
 
 def main():
